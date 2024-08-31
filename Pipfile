@@ -1,0 +1,28 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+h5py = "*"
+scipy = "*"
+numpy = "*"
+matplotlib = "*"
+mne = "*"
+autoreject = "*"
+pandas = "*"
+mne-features = "*"
+scikit-learn = "*"
+tensorflow = "*"
+torch = "*"
+mne-connectivity = "*"
+qtpy = "*"
+ipyevents = "*"
+pyvista = "*"
+pyvistaqt = "*"
+
+[dev-packages]
+ipykernel = "*"
+
+[requires]
+python_version = "3.12"
