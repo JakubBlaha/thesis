@@ -36,9 +36,14 @@ class TrialLabel(Enum):
 
 
 class Trial:
-    def __init__(self, trial_label: TrialLabel, epoch: mne.EpochsArray) -> None:
+    def __init__(self, trial_label: TrialLabel, epoch: mne.EpochsArray, crop_start_end=None) -> None:
         self.trial_label = trial_label
-        self.epoch = epoch
+
+        if crop_start_end:
+            self.epoch = epoch.crop(tmin=crop_start_end[0], tmax=crop_start_end[1])
+        else:
+            self.epoch = epoch
+
         self.info = mne.create_info(
             CHANNEL_NAMES,
             sfreq,
@@ -66,18 +71,20 @@ class Trial:
         # Hurst exp: long term memory, positive follows positive, negative follows negative
         # Approximate entropy:
 
-        funcs = ['hjorth_mobility', 'hjorth_complexity', 'variance',
-                 'app_entropy', 'samp_entropy', 'higuchi_fd', 'katz_fd']
+        funcs = ['hjorth_mobility', 'hjorth_complexity', 'variance', 'app_entropy', 'samp_entropy',
+                 'higuchi_fd', 'katz_fd', 'line_length', 'skewness', 'kurtosis', 'rms', 'hurst_exp', 'decorr_time']
         # extractor = feature_extraction.FeatureExtractor(sfreq, funcs)
-        data = self.epoch.get_data()[0]
+        data = self.epoch.get_data()
 
-        for func_name in funcs:
-            print(func_name)
-            vec = mne_features.get_univariate_funcs(sfreq)[
-                func_name](data)
+        # for band_name, (l_freq, h_freq) in freq_bands.items():
+        #     filtered_data = mne.filter.filter_data(data, sfreq, l_freq, h_freq)
 
-            for ch_val, ch_name in zip(vec, CHANNEL_NAMES):
-                feat_name = f'{func_name}_all_{ch_name}'
+        x = mne_features.feature_extraction.extract_features(data, sfreq, funcs, n_jobs=1)
+        x = x.reshape((len(funcs), n_channels))
+
+        for func_name, channels in zip(funcs, x):
+            for ch_val, ch_name in zip(channels, CHANNEL_NAMES):
+                feat_name = f'time_{func_name}_{ch_name}'
                 self.features[feat_name] = ch_val
 
     def compute_powers(self, normalize):
@@ -109,7 +116,7 @@ class Trial:
 
         # print(freqs.shape)
         res = mne_connectivity.spectral_connectivity_time(
-            self.epoch, freqs=freqs, method="wpli", sfreq=sfreq, mode="cwt_morlet", fmin=min_freqs, fmax=max_freqs,
+            self.epoch, freqs=freqs, method="pli", sfreq=sfreq, mode="cwt_morlet", fmin=min_freqs, fmax=max_freqs,
             faverage=True).get_data()
 
         conn_of_one_epoch = res[0]
@@ -121,7 +128,7 @@ class Trial:
         for band_idx, band in enumerate(matrix):
             for el_idx, el in enumerate(band):
                 for el2_idx, el2 in enumerate(el[:el_idx]):
-                    feat_name = f'wpli_{freq_band_names[band_idx]}_{
+                    feat_name = f'conn_{freq_band_names[band_idx]}_{
                         CHANNEL_NAMES[el_idx]}_{CHANNEL_NAMES[el2_idx]}'
                     self.features[feat_name] = el2
 
@@ -137,34 +144,46 @@ class Trial:
 
                 self.features[f'ai_{band_name}_{right_ch_name}-{left_ch_name}'] = ai
 
-    # def plot_beta(self):
-    #     powers = [el.rel_pow_alpha_2 for el in self.electrodes.values()]
+    def compute_all_features(self):
+        self.compute_time_measures()
+        # self.compute_powers(normalize=True)
+        # self.compute_powers(normalize=False)
+        # self.compute_connectivity()
+        # self.compute_asymmetry()
 
-    #     print(self.info)
 
-    #     mne.viz.topomap.plot_topomap(
-    #         powers, self.info, show=True, names=CHANNEL_NAMES)
+def get_trials_and_labels(trial_kwargs={}):
+    normal_epochs = DaspsPreprocessor.get_normal_epochs()
+    anx_epochs = DaspsPreprocessor.get_severe_moderate_epochs()
 
-    # def get_asym_vect(self):
+    all_epochs = []
+
+    for i, _ in enumerate(normal_epochs):
+        trial = Trial(TrialLabel.CONTROL, normal_epochs[i], **trial_kwargs)
+        trial.compute_all_features()
+        all_epochs.append(trial)
+
+    for i, _ in enumerate(anx_epochs):
+        trial = Trial(TrialLabel.CONTROL, anx_epochs[i], **trial_kwargs)
+        trial.compute_all_features()
+        all_epochs.append(trial)
+
+    all_labels = [0] * len(normal_epochs) + [1] * len(anx_epochs)
+
+    return all_epochs, all_labels
 
 
 if __name__ == '__main__':
     anx_epochs = DaspsPreprocessor.get_severe_moderate_epochs()
     n_epochs = anx_epochs.get_data().shape[0]
 
-    conn = np.empty((n_epochs, n_channels, n_channels, n_bands))
+    # conn = np.empty((n_epochs, n_channels, n_channels, n_bands))
 
     for i in range(n_epochs):
         print(i)
+
         trial = Trial(TrialLabel.CONTROL, anx_epochs[i])
-
-        # trial.show_spectrogram()
-
         trial.compute_time_measures()
-        trial.compute_powers(normalize=True)
-        trial.compute_powers(normalize=False)
-        trial.compute_connectivity()
-        trial.compute_asymmetry()
 
         # conn[i] = trial.compute_connectivity()
         # trial.compute_rel_powers()
@@ -174,7 +193,7 @@ if __name__ == '__main__':
 
         print("Total features: ", len(trial.features))
 
-        break
+        print(trial.epoch.get_data().shape)
 
 # spectral entropy, sample entropy, approximate entropy, lyapunov exponent, hurst exponent, higuchi fd
 
@@ -183,3 +202,6 @@ if __name__ == '__main__':
 # Time: hjorth, katz fd, higuchi fd, entropy, (lyapunov exponent), (detrended fluctuation analysis), hurst exp
 # Time-frequency: DWT, RMS, energy
 # Connectivity: PLI, wPLI, graph theory measures
+
+
+# Classifiers: SVM, RF, Bagging, LightGBM, XGBoost, CatBoost, KNN, LDA, AdaBoost, Gradient Bagging, DT, MLP, SSAE, CNN, DBN, RBFNN, CNN, LSTM, NB

@@ -20,6 +20,9 @@ qtpy = "*"
 ipyevents = "*"
 pyvista = "*"
 pyvistaqt = "*"
+lightgbm = "*"
+imblearn = "*"
+xgboost = "*"
 
 [dev-packages]
 ipykernel = "*"
