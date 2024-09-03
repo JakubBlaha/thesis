@@ -146,10 +146,10 @@ class Trial:
 
     def compute_all_features(self):
         self.compute_time_measures()
-        # self.compute_powers(normalize=True)
-        # self.compute_powers(normalize=False)
-        # self.compute_connectivity()
-        # self.compute_asymmetry()
+        self.compute_powers(normalize=True)
+        self.compute_powers(normalize=False)
+        self.compute_connectivity()
+        self.compute_asymmetry()
 
 
 def get_trials_and_labels(trial_kwargs={}):
