@@ -102,7 +102,7 @@ class DaspsPreprocessor:
     def get_situations() -> list[DaspsSituation]:
         situations: list[DaspsSituation] = []
 
-        with open('data/dasps.csv') as f:
+        with open('data/DASPS.csv') as f:
             reader = csv.DictReader(f)
 
             for row in reader:
