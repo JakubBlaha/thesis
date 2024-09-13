@@ -23,6 +23,7 @@ pyvistaqt = "*"
 lightgbm = "*"
 imblearn = "*"
 xgboost = "*"
+torcheval = "*"
 
 [dev-packages]
 ipykernel = "*"

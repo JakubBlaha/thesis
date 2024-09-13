@@ -88,7 +88,6 @@ SVC_poly                      0.601937
 SVC_linear                    0.598831
 BernoulliNB                   0.566822
 SVC_sigmoid                   0.537394
-dtype: float64
 
 ```
 
@@ -391,4 +390,129 @@ All features (PLI): 8 seconds
 
 RF is consistently the best classifier
 
-SVC_sigmoid is consistently doing bad
+SVC_sigmoid, SVC_poly, BernoulliNB are consistently doing bad
+
+
+# Parameter tuning
+
+## RF
+
+Best parameters found:  {'max_depth': 20, 'max_features': 'sqrt', 'min_samples_leaf': 1, 'min_samples_split': 2, 'n_estimators': 260}
+Best accuracy found:  0.8332157258064516
+
+```
+param_grid = {
+    'n_estimators': [i for i in range(10, 500, 50)],
+    'max_depth': [i for i in range(10, 51, 10)],
+    'min_samples_split': [i for i in range(2, 10, 2)],
+    'min_samples_leaf': [i for i in range(1, 5)],
+    'max_features': [None, 'sqrt', 'log2']
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Archive
+
+## wPLI
+
+### Mean accuracy
+
+RF                            0.729342
+LGBMClassifier                0.699320
+GradientBoostingClassifier    0.699100
+XGBClassifier                 0.691030
+MLP                           0.688518
+SVC_rbf                       0.687507
+SVC_linear                    0.675378
+SVC_poly                      0.649379
+AdaBoostClassifier            0.649299
+LDA                           0.643999
+KNN                           0.588300
+BernoulliNB                   0.569942
+SVC_sigmoid                   0.565214
+
+### By duration
+
+10 seconds    0.673593
+12 seconds    0.671190
+15 seconds    0.667297
+8 seconds     0.645831
+4 seconds     0.644657
+6 seconds     0.637276
+
+### 10 seconds duration
+
+RF                            0.736769
+LGBMClassifier                0.713441
+GradientBoostingClassifier    0.710376
+XGBClassifier                 0.708966
+MLP                           0.703989
+SVC_rbf                       0.699949
+AdaBoostClassifier            0.699329
+SVC_linear                    0.687486
+SVC_poly                      0.644245
+LDA                           0.639467
+SVC_sigmoid                   0.613072
+KNN                           0.607353
+BernoulliNB                   0.592273
+
+## Full table
+
+                            4 seconds  6 seconds  8 seconds  10 seconds  12 seconds  15 seconds
+BernoulliNB                  0.535294   0.557998   0.565003    0.592273    0.595131    0.573953
+XGBClassifier                0.667573   0.665678   0.681690    0.708966    0.716226    0.706047
+AdaBoostClassifier           0.603231   0.637696   0.652852    0.699329    0.649836    0.652852
+MLP                          0.683054   0.657192   0.686590    0.703989    0.702696    0.697588
+RF                           0.730594   0.724944   0.720947    0.736769    0.734007    0.728792
+KNN                          0.556349   0.569042   0.569211    0.607353    0.602243    0.625602
+LDA                          0.627281   0.626928   0.643559    0.639467    0.662130    0.664629
+SVC_poly                     0.706948   0.660553   0.627532    0.644245    0.624035    0.632960
+SVC_linear                   0.683702   0.652576   0.668597    0.687486    0.682028    0.677880
+SVC_sigmoid                  0.540415   0.510584   0.531746    0.613072    0.617737    0.577732
+SVC_rbf                      0.709631   0.654091   0.663717    0.699949    0.714649    0.683006
+GradientBoostingClassifier   0.664053   0.681403   0.699460    0.710376    0.716231    0.723077
+LGBMClassifier               0.672417   0.685899   0.684900    0.713441    0.708520    0.730742
+
+## PLV
+
+                10 seconds
+MLP               0.702601
+RF                0.712337
+SVC_rbf           0.681106
+LGBMClassifier    0.706795
+
+## Coh
+
+                10 seconds
+MLP               0.697545
+RF                0.722442
+SVC_rbf           0.659708
+LGBMClassifier    0.688198
+
+## ciPLV
+
+                10 seconds
+MLP               0.685960
+RF                0.727814
+SVC_rbf           0.701249
+LGBMClassifier    0.705397
+
+
+# What to include
+
+- tweaking time - time features are most sensitive to this

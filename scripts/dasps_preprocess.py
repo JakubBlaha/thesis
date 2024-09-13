@@ -1,14 +1,15 @@
 from dataclasses import dataclass
 from enum import Enum
+from autoreject import AutoReject
 import csv
 import h5py
 import numpy as np
 import mne
 
+from common import CHANNEL_NAMES, Trial, TrialLabel
+
 
 DASPS_FS = 128
-CHANNEL_NAMES = ['AF3', 'F7', 'F3', 'FC5', 'T7',
-                 'P7', 'O1', 'O2', 'P8', 'T8', 'FC6', 'F4', 'F8', 'AF4']
 
 
 class Severity(Enum):
@@ -68,7 +69,7 @@ class DaspsSituation:
     #     raw.plot(n_channels=14, duration=30, scalings=200e-6)
     #     plt.show()
 
-    def get_both_epochs(self):
+    def get_epoch_array(self, duration: int):
         # filename = f'data/dasps_preprocessed/{self.id_}preprocessed.mat'
         filename = f'data/dasps_raw_mat/{self.id_}.mat'
 
@@ -83,16 +84,24 @@ class DaspsSituation:
         sit_epochs = data[recitation_epoch_idx:imagining_epoch_idx + 1]
         sit_epochs = sit_epochs.swapaxes(1, 2)
 
-        # print(sit_epochs.shape)
-        # print(recitation_epoch_idx, imagining_epoch_idx)
-
         channel_types = ['eeg'] * len(CHANNEL_NAMES)  # All channels are EEG
         info = mne.create_info(
             ch_names=CHANNEL_NAMES, ch_types=channel_types, sfreq=DASPS_FS)  # type: ignore
+        info.set_montage('standard_1020')
+
         epochs = mne.EpochsArray(sit_epochs, info)
 
-        # print(epochs)
-        # print(epochs.info)
+        data = epochs.get_data()
+
+        # print(data.shape)
+
+        first = data[0]
+        second = data[1]
+
+        both = np.concatenate((first, second), axis=1)
+        both = mne.io.RawArray(both, info)
+
+        epochs = mne.make_fixed_length_epochs(both, duration=duration, overlap=0.5 * duration)
 
         return epochs
 
@@ -151,22 +160,61 @@ class DaspsPreprocessor:
         return normal_situations
 
     @staticmethod
-    def get_normal_epochs() -> mne.EpochsArray:
+    def _get_normal_epochs(duration, autoreject=False) -> mne.EpochsArray:
         normal_sits = DaspsPreprocessor.get_normal_sits()
 
-        normal_epochs = mne.concatenate_epochs(
-            [sit.get_both_epochs() for sit in normal_sits])
+        epochs = mne.concatenate_epochs(
+            [sit.get_epoch_array(duration) for sit in normal_sits])
 
-        return normal_epochs
+        if autoreject:
+            ar = AutoReject()
+            epochs = ar.fit_transform(epochs)
+
+        return epochs
 
     @staticmethod
-    def get_severe_moderate_epochs() -> mne.EpochsArray:
+    def _get_severe_moderate_epochs(duration, autoreject=False) -> mne.EpochsArray:
         severe_moderate_sits = DaspsPreprocessor.get_severe_moderate_sits()
 
-        severe_moderate_epochs = mne.concatenate_epochs(
-            [sit.get_both_epochs() for sit in severe_moderate_sits])
+        epochs = mne.concatenate_epochs(
+            [sit.get_epoch_array(duration) for sit in severe_moderate_sits])
 
-        return severe_moderate_epochs
+        if autoreject:
+            ar = AutoReject()
+            epochs = ar.fit_transform(epochs)
+
+        return epochs
+
+    # @staticmethod
+    # def _get_interval_from_seconds(seconds):
+    #     max_seconds = 14.9
+    #     default_start_seconds = 7
+
+    #     optimal_end_time = default_start_seconds + seconds
+    #     missing_seconds = optimal_end_time - max_seconds
+
+    #     move_start_left = max(0, missing_seconds)
+
+    #     seconds_start = default_start_seconds - move_start_left
+    #     seconds_end = seconds_start + seconds
+
+    #     assert seconds_end <= max_seconds
+
+    #     return seconds_start, seconds_end
+
+    @staticmethod
+    def get_trials(duration: int, autoreject=False):
+        normal_epochs = DaspsPreprocessor._get_normal_epochs(duration, autoreject=autoreject)
+        anx_epochs = DaspsPreprocessor._get_severe_moderate_epochs(duration, autoreject=autoreject)
+
+        # _trial_w = DaspsPreprocessor._get_interval_from_seconds(trial_seconds)
+
+        normal_trials = [Trial(TrialLabel.CONTROL, normal_epochs[i])
+                         for i in range(len(normal_epochs))]
+        anx_trials = [Trial(TrialLabel.GAD, anx_epochs[i])
+                      for i in range(len(anx_epochs))]
+
+        return normal_trials + anx_trials
 
 
 if __name__ == '__main__':

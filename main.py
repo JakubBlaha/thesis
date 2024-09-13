@@ -1,176 +1,197 @@
 from enum import Enum
-import mne
-import mne_connectivity
-import mne_connectivity.viz
-import mne_features
 import numpy as np
-from mne_features import feature_extraction, univariate
-from dataclasses import dataclass
-import matplotlib.pyplot as plt
+import contextlib
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
+import sklearn.utils
+from torch.utils.data import Dataset
+from sklearn.feature_selection import VarianceThreshold, SelectKBest
+from imblearn.over_sampling import RandomOverSampler
 
-from scripts.dasps_preprocess import DaspsPreprocessor, CHANNEL_NAMES
-
-
-sfreq = 128
-n_channels = 14
-freq_bands = {
-    # 'delta': (0.5, 4), # delta has been filtered out
-    'theta': [4, 8],
-    'alpha-1': [8, 10],
-    'alpha-2': [10, 13],
-    'beta': [13, 30],
-    'gamma': [30, 45],  # above 45 has been filtered out
-}
-freq_band_names = list(freq_bands.keys())
-n_bands = len(freq_bands)
-min_freqs = [freq_bands[band][0] for band in freq_bands]
-max_freqs = [freq_bands[band][1] for band in freq_bands]
-left_channels = sorted([i for i in CHANNEL_NAMES if int(i[-1]) % 2 == 1])
-right_channels = sorted([i for i in CHANNEL_NAMES if int(i[-1]) % 2 == 0])
+from common import Trial, TrialLabel
+from scripts.dasps_preprocess import DaspsPreprocessor
 
 
-class TrialLabel(Enum):
-    CONTROL = 0
-    GAD = 1
-    SAD = 2
+class FeatureGroup(Enum):
+    TIME = 0
+    REL_POWER = 1
+    ABS_POWER = 2
+    CONNECTIVITY = 3
+    ASYMMETRY = 4
 
 
-class Trial:
-    def __init__(self, trial_label: TrialLabel, epoch: mne.EpochsArray, crop_start_end=None) -> None:
-        self.trial_label = trial_label
+ALL_FEAT_GROUPS = [FeatureGroup.TIME, FeatureGroup.REL_POWER,
+                   FeatureGroup.ABS_POWER, FeatureGroup.CONNECTIVITY, FeatureGroup.ASYMMETRY]
 
-        if crop_start_end:
-            self.epoch = epoch.crop(tmin=crop_start_end[0], tmax=crop_start_end[1])
+
+class CustomDataset(Dataset):
+    def __init__(self, trials: list[Trial]) -> None:
+        self.trials = trials
+
+        self._feat_selector = None
+
+        self._train_data = None
+        self._train_labels = None
+        self._test_data = None
+        self._test_labels = None
+
+        self._subset_mode = None
+
+    def _get_labels(self):
+        return [trial.trial_label.value for trial in self.trials]
+
+    def compute_features(self, groups=ALL_FEAT_GROUPS):
+        for index, trial in enumerate(self.trials):
+            trial.features = {}
+
+            print("Computing features for trial: ", index)
+
+            if FeatureGroup.TIME in groups:
+                trial.compute_time_measures()
+            if FeatureGroup.REL_POWER in groups:
+                trial.compute_powers(normalize=True)
+            if FeatureGroup.ABS_POWER in groups or FeatureGroup.ASYMMETRY in groups:
+                trial.compute_powers(normalize=False)
+            if FeatureGroup.CONNECTIVITY in groups:
+                trial.compute_connectivity()
+            if FeatureGroup.ASYMMETRY in groups:
+                trial.compute_asymmetry()
+
+            if FeatureGroup.ASYMMETRY in groups and FeatureGroup.ABS_POWER not in groups:
+                trial.features = {key: val for key, val in trial.features.items() if 'abs_pow' not in key}
+
+        self._train_data = None
+        self._train_labels = None
+        self._train_data = None
+        self._train_labels = None
+
+    def select_by_var(self):
+        self._feat_selector = VarianceThreshold(threshold=0.01)
+
+    def select_k_best(self, k=11):
+        self._feat_selector = SelectKBest(k=k)
+
+    def select_all_features(self):
+        self._feat_selector = None
+
+    def preprocess(self, oversample=True, normalize=True, shuffle=True):
+        data = np.array([list(trial.features.values()) for trial in self.trials])
+        labels = [trial.trial_label.value for trial in self.trials]
+
+        # Select features
+        _feat_names = list(self.trials[0].features.keys())
+
+        _transform_args: list = [data]
+
+        if self._feat_selector:
+            if isinstance(self._feat_selector, SelectKBest):
+                _transform_args.append(labels)
+
+            self._feat_selector.fit_transform(*_transform_args)
+
+            _sel_feat_names = self._feat_selector.get_feature_names_out(_feat_names)
+            _sel_feat_idx = self._feat_selector.get_support(indices=True)
         else:
-            self.epoch = epoch
+            _sel_feat_names = _feat_names
+            _sel_feat_idx = [i for i in range(len(_feat_names))]
 
-        self.info = mne.create_info(
-            CHANNEL_NAMES,
-            sfreq,
-            ch_types='eeg',
-        )
-        self.info.set_montage('standard_1020')
-        self.features = {}
+        data = data[:, _sel_feat_idx]
 
-    # def show_spectrogram(self):
-    #     freqs = np.logspace(*np.log10([6, 35]), num=8)
-    #     n_cycles = freqs / 2
+        # Normalization
+        if normalize:
+            scaler = StandardScaler()
+            data = scaler.fit_transform(data)
 
-    #     power = self.epoch.compute_tfr(
-    #         method="morlet",
-    #         freqs=freqs,
-    #         n_cycles=n_cycles,
-    #         average=True,
-    #         decim=3
-    #     )
+        # Oversampling
+        if oversample:
+            ros = RandomOverSampler(random_state=0)
+            data, labels = ros.fit_resample(data, labels)
 
-    #     power.plot(baseline=(-0.5, 0), mode='logratio',
-    #                title='Average power')
+        if shuffle:
+            data, labels = sklearn.utils.shuffle(data, labels, random_state=0)
 
-    def compute_time_measures(self):
-        # Hurst exp: long term memory, positive follows positive, negative follows negative
-        # Approximate entropy:
+        data = np.array(data, dtype=np.float32)
+        labels = np.array(labels)
 
-        funcs = ['hjorth_mobility', 'hjorth_complexity', 'variance', 'app_entropy', 'samp_entropy',
-                 'higuchi_fd', 'katz_fd', 'line_length', 'skewness', 'kurtosis', 'rms', 'hurst_exp', 'decorr_time']
-        # extractor = feature_extraction.FeatureExtractor(sfreq, funcs)
-        data = self.epoch.get_data()
+        self._train_data, self._test_data, self._train_labels, self._test_labels = train_test_split(
+            data, labels, test_size=0.2, random_state=0)
 
-        # for band_name, (l_freq, h_freq) in freq_bands.items():
-        #     filtered_data = mne.filter.filter_data(data, sfreq, l_freq, h_freq)
+    def _get_data_labels_in_context(self):
+        if self._subset_mode == 'train':
+            return self._train_data, self._train_labels
 
-        x = mne_features.feature_extraction.extract_features(data, sfreq, funcs, n_jobs=1)
-        x = x.reshape((len(funcs), n_channels))
+        if self._subset_mode == 'test':
+            return self._test_data, self._test_labels
 
-        for func_name, channels in zip(funcs, x):
-            for ch_val, ch_name in zip(channels, CHANNEL_NAMES):
-                feat_name = f'time_{func_name}_{ch_name}'
-                self.features[feat_name] = ch_val
+        raise Exception('No test or train mode selected!')
 
-    def compute_powers(self, normalize):
-        # 70 values at the start are powers
-        freq_bands_ = np.asanyarray([freq_bands[band][0]
-                                     for band in freq_bands] + [freq_bands['gamma'][1]])
-        print(freq_bands_)
-        print(freq_bands_.shape)
+    @property
+    def n_features(self):
+        if self._train_data is None:
+            raise Exception("Preprocess data first!")
 
-        powers_and_ratios = univariate.compute_pow_freq_bands(
-            sfreq, self.epoch.get_data()[0],
-            freq_bands_, normalize=normalize, ratios='all', psd_method='welch',
-            psd_params={'welch_n_overlap': sfreq // 2})
-        powers = powers_and_ratios[:n_channels *
-                                   n_bands].reshape((n_channels, -1))
+        return self._train_data.shape[1]
 
-        for el_idx, el in enumerate(powers):
-            for band_idx, band_pow in enumerate(el):
-                feat_name = f'{'rel' if normalize else 'abs'}_pow_{freq_band_names[band_idx]}_{
-                    CHANNEL_NAMES[el_idx]}'
-                self.features[feat_name] = band_pow
+    @property
+    def data(self):
+        _data, _ = self._get_data_labels_in_context()
 
-    def compute_connectivity(self):
-        min_freq = min(min_freqs)
-        max_freq = max(max_freqs)
+        if _data is None:
+            raise Exception("Preprocess data first!")
 
-        freqs = np.linspace(min_freq, max_freq, int(
-            (max_freq - min_freq) * 4 + 1))
+        return _data
 
-        # print(freqs.shape)
-        res = mne_connectivity.spectral_connectivity_time(
-            self.epoch, freqs=freqs, method="pli", sfreq=sfreq, mode="cwt_morlet", fmin=min_freqs, fmax=max_freqs,
-            faverage=True).get_data()
+    @property
+    def labels(self):
+        _, _labels = self._get_data_labels_in_context()
 
-        conn_of_one_epoch = res[0]
-        matrix = conn_of_one_epoch.reshape(
-            (n_channels, n_channels, n_bands))
+        if _labels is None:
+            raise Exception("Preprocess data first!")
 
-        matrix = np.moveaxis(matrix, 2, 0)
+        return _labels
 
-        for band_idx, band in enumerate(matrix):
-            for el_idx, el in enumerate(band):
-                for el2_idx, el2 in enumerate(el[:el_idx]):
-                    feat_name = f'conn_{freq_band_names[band_idx]}_{
-                        CHANNEL_NAMES[el_idx]}_{CHANNEL_NAMES[el2_idx]}'
-                    self.features[feat_name] = el2
+    @property
+    def all_data(self):
+        return np.concatenate((self._train_data, self._test_data))
 
-        return matrix
+    @property
+    def all_labels(self):
+        return np.concatenate((self._train_labels, self._test_labels))
 
-    def compute_asymmetry(self):
-        for band_name in freq_band_names:
-            for left_ch_name, right_ch_name in zip(left_channels, right_channels):
-                left_abs = self.features['abs_pow_' + band_name + '_' + left_ch_name]
-                right_abs = self.features['abs_pow_' + band_name + '_' + right_ch_name]
+    @contextlib.contextmanager
+    def train(self):
+        try:
+            self._subset_mode = 'train'
+            yield None
+        finally:
+            self._subset_mode = None
 
-                ai = np.log(right_abs) - np.log(left_abs)
+    @contextlib.contextmanager
+    def test(self):
+        try:
+            self._subset_mode = 'test'
+            yield None
+        finally:
+            self._subset_mode = None
 
-                self.features[f'ai_{band_name}_{right_ch_name}-{left_ch_name}'] = ai
+    def __len__(self):
+        if self._subset_mode is None:
+            raise Exception("Train or test mode needs to be selected!")
 
-    def compute_all_features(self):
-        self.compute_time_measures()
-        self.compute_powers(normalize=True)
-        self.compute_powers(normalize=False)
-        self.compute_connectivity()
-        self.compute_asymmetry()
+        _data, _ = self._get_data_labels_in_context()
 
+        if _data is None:
+            raise Exception("Preprocess data first!")
 
-def get_trials_and_labels(trial_kwargs={}):
-    normal_epochs = DaspsPreprocessor.get_normal_epochs()
-    anx_epochs = DaspsPreprocessor.get_severe_moderate_epochs()
+        return len(_data)
 
-    all_epochs = []
+    def __getitem__(self, idx):
+        _data, _labels = self._get_data_labels_in_context()
 
-    for i, _ in enumerate(normal_epochs):
-        trial = Trial(TrialLabel.CONTROL, normal_epochs[i], **trial_kwargs)
-        trial.compute_all_features()
-        all_epochs.append(trial)
+        if _data is None or _labels is None:
+            raise Exception("Preprocess data first!")
 
-    for i, _ in enumerate(anx_epochs):
-        trial = Trial(TrialLabel.CONTROL, anx_epochs[i], **trial_kwargs)
-        trial.compute_all_features()
-        all_epochs.append(trial)
-
-    all_labels = [0] * len(normal_epochs) + [1] * len(anx_epochs)
-
-    return all_epochs, all_labels
+        return _data[idx], _labels[idx]
 
 
 if __name__ == '__main__':
@@ -183,17 +204,20 @@ if __name__ == '__main__':
         print(i)
 
         trial = Trial(TrialLabel.CONTROL, anx_epochs[i])
-        trial.compute_time_measures()
+        trial.compute_all_features()
+        # trial.compute_time_measures()
 
         # conn[i] = trial.compute_connectivity()
         # trial.compute_rel_powers()
 
-        print(*[(key, trial.features[key])
-              for key in trial.features], sep='\n')
+        # print(*[(key, trial.features[key])
+        #       for key in trial.features], sep='\n')
 
         print("Total features: ", len(trial.features))
 
-        print(trial.epoch.get_data().shape)
+        trial.select_features()
+
+        break
 
 # spectral entropy, sample entropy, approximate entropy, lyapunov exponent, hurst exponent, higuchi fd
 
