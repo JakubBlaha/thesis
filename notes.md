@@ -411,6 +411,11 @@ param_grid = {
 ```
 
 
+# CNN with site power image representation
+
+avg acc 5 x 5 fold
+- autoreject: 71
+- without autoreject: 74
 
 
 

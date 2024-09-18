@@ -4,8 +4,11 @@ import mne
 import mne_features
 import mne_connectivity
 import numpy as np
+import io
 from mne_features import univariate
 from sklearn.feature_selection import VarianceThreshold
+from matplotlib import pyplot as plt
+from PIL import Image
 
 CHANNEL_NAMES = ['AF3', 'F7', 'F3', 'FC5', 'T7',
                  'P7', 'O1', 'O2', 'P8', 'T8', 'FC6', 'F4', 'F8', 'AF4']
@@ -139,6 +142,39 @@ class Trial:
                 ai = np.log(right_abs) - np.log(left_abs)
 
                 self.features[f'ai_{band_name}_{right_ch_name}-{left_ch_name}'] = ai
+
+    def compute_power_matrices(self):
+        freq_bands_ = np.asanyarray([freq_bands[band][0]
+                                     for band in freq_bands] + [freq_bands['gamma'][1]])
+
+        powers = mne_features.univariate.compute_pow_freq_bands(
+            sfreq, self.epoch.get_data()[0],
+            freq_bands_, normalize=True, psd_method='welch',
+            psd_params={'welch_n_overlap': sfreq // 2})
+        powers = powers[:n_channels *
+                        n_bands].reshape((n_channels, -1))
+        powers = powers.swapaxes(0, 1)
+
+        matrices = []
+
+        for i in range(n_bands):
+            fig, ax = plt.subplots(frameon=False)
+            im, _ = mne.viz.plot_topomap(powers[i], self.epoch.info, contours=0, sensors=False,
+                                         outlines=None, res=32, cmap="Greys", axes=ax, show=False)
+
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png', bbox_inches='tight', pad_inches=0)
+            plt.close()
+            buf.seek(0)
+
+            image = Image.open(buf)
+            image = image.resize((32, 32))
+            gray_image = image.convert('L')
+            pixel_array = np.asarray(gray_image)
+
+            matrices.append(pixel_array)
+
+        self.power_matrices = np.array(matrices)
 
     def compute_all_features(self):
         self.compute_time_measures()

@@ -24,6 +24,7 @@ lightgbm = "*"
 imblearn = "*"
 xgboost = "*"
 torcheval = "*"
+tqdm = "*"
 
 [dev-packages]
 ipykernel = "*"
