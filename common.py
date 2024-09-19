@@ -87,18 +87,21 @@ class Trial:
                 self.features[feat_name] = ch_val
 
     def compute_powers(self, normalize):
-        # 70 values at the start are powers
         freq_bands_ = np.asanyarray([freq_bands[band][0]
                                      for band in freq_bands] + [freq_bands['gamma'][1]])
-        print(freq_bands_)
-        print(freq_bands_.shape)
+
+        data = self.epoch.get_data()[0]
 
         powers_and_ratios = univariate.compute_pow_freq_bands(
-            sfreq, self.epoch.get_data()[0],
+            sfreq, data,
             freq_bands_, normalize=normalize, ratios='all', psd_method='welch',
             psd_params={'welch_n_overlap': sfreq // 2})
-        powers = powers_and_ratios[:n_channels *
-                                   n_bands].reshape((n_channels, -1))
+        num_powers = n_channels * n_bands
+        powers = powers_and_ratios[:num_powers].reshape((n_channels, -1))
+
+        # shape is (n_channels, n_bands, n_bands-1)
+        ratios = powers_and_ratios[num_powers:]
+        self.pow_ratios = ratios.reshape(n_channels, n_bands, -1)
 
         for el_idx, el in enumerate(powers):
             for band_idx, band_pow in enumerate(el):

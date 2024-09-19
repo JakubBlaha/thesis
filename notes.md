@@ -411,21 +411,15 @@ param_grid = {
 ```
 
 
-# CNN with site power image representation
+# Model results
 
-avg acc 5 x 5 fold
-- autoreject: 71
-- without autoreject: 74
-
-
-
-
-
-
-
-
-
-
+| Model                                 | Testing             | Acc |
+| ------------------------------------- | ------------------- | --- |
+| CNN power images 8 seconds autoreject | avg acc 5 x 5 fold  | 71  |
+| CNN power images 8 seconds            | avg acc 10 x 5 fold | 74  |
+| CNN power ratios 8 seconds            | avg acc 10 x 5 fold | 80  |
+| CNN power ratios 8 seconds autoreject | avg acc 10 x 5 fold | 77  |
+| CNN power ratios 15 seconds           | avg acc 5 x 5 fold  | 81  |
 
 
 
