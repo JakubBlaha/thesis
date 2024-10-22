@@ -103,6 +103,8 @@ class Trial:
         ratios = powers_and_ratios[num_powers:]
         self.pow_ratios = ratios.reshape(n_channels, n_bands, -1)
 
+        # TODO also add power ratios
+
         for el_idx, el in enumerate(powers):
             for band_idx, band_pow in enumerate(el):
                 feat_name = f'{'rel' if normalize else 'abs'}_pow_{freq_band_names[band_idx]}_{
@@ -133,6 +135,8 @@ class Trial:
                     feat_name = f'conn_{freq_band_names[band_idx]}_{
                         CHANNEL_NAMES[el_idx]}_{CHANNEL_NAMES[el2_idx]}'
                     self.features[feat_name] = el2
+
+        self.fc_matrix = matrix
 
         return matrix
 

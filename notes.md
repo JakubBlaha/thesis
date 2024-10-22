@@ -1,3 +1,49 @@
+- [Comparing accuracy of all classifiers on DASPS](#comparing-accuracy-of-all-classifiers-on-dasps)
+  - [Time features](#time-features)
+    - [Mean accuracy](#mean-accuracy)
+    - [12 seconds](#12-seconds)
+    - [Full table](#full-table)
+  - [Relative power](#relative-power)
+    - [Mean accuracy](#mean-accuracy-1)
+    - [By durations](#by-durations)
+    - [8 seconds (best accuracy)](#8-seconds-best-accuracy)
+    - [Full table](#full-table-1)
+  - [Absolute power](#absolute-power)
+    - [Accuracy mean](#accuracy-mean)
+    - [By duration](#by-duration)
+    - [8 seconds duration](#8-seconds-duration)
+    - [Full table](#full-table-2)
+  - [Asymmetry](#asymmetry)
+  - [Mean accuracy](#mean-accuracy-2)
+  - [By duration](#by-duration-1)
+  - [8 seconds duration](#8-seconds-duration-1)
+  - [PLI](#pli)
+    - [Mean accuracies](#mean-accuracies)
+    - [By duration](#by-duration-2)
+    - [Full table](#full-table-3)
+  - [All features (PLI)](#all-features-pli)
+    - [Mean accuracy](#mean-accuracy-3)
+    - [By duration](#by-duration-3)
+  - [8 seconds](#8-seconds)
+  - [Full table](#full-table-4)
+  - [Conclusions](#conclusions)
+- [Parameter tuning](#parameter-tuning)
+  - [RF](#rf)
+- [Model results](#model-results)
+- [Archive](#archive)
+  - [wPLI](#wpli)
+    - [Mean accuracy](#mean-accuracy-4)
+    - [By duration](#by-duration-4)
+    - [10 seconds duration](#10-seconds-duration)
+  - [Full table](#full-table-5)
+  - [PLV](#plv)
+  - [Coh](#coh)
+  - [ciPLV](#ciplv)
+- [What to include](#what-to-include)
+- [Resources](#resources)
+
+
+
 # Comparing accuracy of all classifiers on DASPS
 
 ## Time features
@@ -261,9 +307,9 @@ BernoulliNB                   0.614183
 SVC_sigmoid                   0.599401
 ```
 
-### PLI
+## PLI
 
-## Mean accuracies
+### Mean accuracies
 
 ```
 RF                            0.731455
@@ -281,7 +327,7 @@ SVC_sigmoid                   0.606982
 KNN                           0.584634
 ```
 
-## By duration
+### By duration
 
 ```
 8 seconds     0.680775
@@ -292,7 +338,7 @@ KNN                           0.584634
 15 seconds    0.643526
 ```
 
-## Full table
+### Full table
 
 ```
                             4 seconds  6 seconds  8 seconds  10 seconds  12 seconds  15 seconds
@@ -420,6 +466,10 @@ param_grid = {
 | CNN power ratios 8 seconds            | avg acc 10 x 5 fold | 80  |
 | CNN power ratios 8 seconds autoreject | avg acc 10 x 5 fold | 77  |
 | CNN power ratios 15 seconds           | avg acc 5 x 5 fold  | 81  |
+| CNN fc matrix 8 seconds               | avg acc 5 x 5 fold  | 74  |
+| CNN fc matrix 15 seconds              | avg acc 5 x 5 fold  | 71  |
+| CNN fc matrix 10 seconds              | avg acc 5 x 5 fold  | 72  |
+| CNN fc matrix 3 seconds               | avg acc 5 x 5 fold  | 70  |
 
 
 
@@ -515,3 +565,11 @@ LGBMClassifier    0.705397
 # What to include
 
 - tweaking time - time features are most sensitive to this
+- data is split into train and validation sets or CV is used in case of traditional classifiers
+
+
+
+
+
+# Resources
+- https://github.com/CNN-for-EEG-classification/CNN-EEG
