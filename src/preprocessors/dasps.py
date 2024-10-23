@@ -5,11 +5,41 @@ import csv
 import h5py
 import numpy as np
 import mne
+import os
+import matplotlib.pyplot as plt
 
 from common import CHANNEL_NAMES, Trial, TrialLabel
 
 
 DASPS_FS = 128
+DATA_PATH = os.path.abspath("../data/dasps")
+
+# Subjects are split into two groups based on HAM-A score at the end of the
+# experiment. Scores < 20 (normal, light) are classified as low anxiety, scores > 20
+# (moderate, severe) are classified as high anxiety. There are no scores equal to 20.
+HAM_HA_SUBJECTS = [1, 2, 3, 4, 5, 6, 7, 11, 12, 13, 16, 17, 19, 20, 21, 22]
+HAM_LA_SUBJECTS = [8, 9, 10, 14, 15, 18, 23]
+
+
+def get_subject_epochs(subject_id: int):
+    fname = os.path.join(DATA_PATH, 'raw_mat', 'S' + str(subject_id).zfill(2) + ".mat")
+
+    with h5py.File(fname, 'r') as f:
+        data = np.array(f['data'])
+
+    channel_types = ['eeg'] * len(CHANNEL_NAMES)
+
+    info = mne.create_info(
+        ch_names=CHANNEL_NAMES, ch_types=channel_types, sfreq=DASPS_FS)  # type: ignore
+    info.set_montage('standard_1020')
+
+    print(data.shape)
+
+    data = data.swapaxes(1, 2)
+
+    epochs = mne.EpochsArray(data, info)
+
+    return epochs
 
 
 class Severity(Enum):
@@ -19,64 +49,36 @@ class Severity(Enum):
     SEVERE = 3
 
 
-class DaspsTrialKind(Enum):
-    RECITING = 0
-    IMAGINING = 1
-
-
 @dataclass
 class DaspsTrial:
-    kind: DaspsTrialKind
-    recording = None
-
-
-@dataclass
-class DaspsSituation:
-    id_: str
+    subject_id: int
     index: int
     valence: float
     arousal: float
 
-    def get_sam_label(self):
+    sam_label: Severity | None = None
+
+    def __post_init__(self):
+        # Calculate anxiety severity from valence and arousal, e.g. the SAM label
         if self.valence > 5 or self.arousal < 5:
-            # print('normal 1')
-            return Severity.NORMAL
+            self.sam_label = Severity.NORMAL
+        elif self.valence in [0, 1, 2] and self.arousal in [7, 8, 9]:
+            self.sam_label = Severity.SEVERE
+        elif self.valence in [2, 3, 4] and self.arousal in [6]:
+            self.sam_label = Severity.MODERATE
+        elif self.valence in [4, 5] and self.arousal in [5]:
+            self.sam_label = Severity.LIGHT
+        else:
+            self.sam_label = Severity.NORMAL
 
-        if self.valence in [0, 1, 2] and self.arousal in [7, 8, 9]:
-            # print('severe')
-            return Severity.SEVERE
+    def get_epochs_precleaned(self, duration: int):
+        # fname = os.path.join(DATA_PATH, 'preprocessed', self.subject_id + "preprocessed.mat")
+        fname = os.path.join(DATA_PATH, 'raw_mat', 'S' + str(self.subject_id).zfill(2) + ".mat")
 
-        if self.valence in [2, 3, 4] and self.arousal in [6]:
-            # print('moderate')
-            return Severity.MODERATE
-
-        if self.valence in [4, 5] and self.arousal in [5]:
-            # print('light')
-            return Severity.LIGHT
-
-        # print('normal 2')
-        return Severity.NORMAL
-
-    # def get_trials(self):
-    #     filename = f'data/dasps_raw_edf/{self.id_}.edf'
-
-    #     raw = mne.io.read_raw_edf(filename, preload=True)
-
-    #     print(raw.info)
-
-    #     raw = raw.pick(CHANNEL_NAMES)
-
-    #     raw.plot(n_channels=14, duration=30, scalings=200e-6)
-    #     plt.show()
-
-    def get_epoch_array(self, duration: int):
-        # filename = f'data/dasps_preprocessed/{self.id_}preprocessed.mat'
-        filename = f'data/dasps_raw_mat/{self.id_}.mat'
-
-        print(f"Getting epochs for filename {filename}")
-
-        with h5py.File(filename, 'r') as f:
+        with h5py.File(fname, 'r') as f:
             data = np.array(f['data'])
+
+        print(data.shape)
 
         recitation_epoch_idx = self.index * 2
         imagining_epoch_idx = recitation_epoch_idx + 1
@@ -91,9 +93,16 @@ class DaspsSituation:
 
         epochs = mne.EpochsArray(sit_epochs, info)
 
-        data = epochs.get_data()
+        # Preprocess
+        epochs.filter(l_freq=0.5, h_freq=30)
+        ica = mne.preprocessing.ICA(n_components=14, random_state=97, max_iter=800)
+        ica.fit(epochs)
 
-        # print(data.shape)
+        # ica.plot_components()
+
+        # epochs.plot_psd()
+
+        data = epochs.get_data()
 
         first = data[0]
         second = data[1]
@@ -101,26 +110,56 @@ class DaspsSituation:
         both = np.concatenate((first, second), axis=1)
         both = mne.io.RawArray(both, info)
 
-        epochs = mne.make_fixed_length_epochs(both, duration=duration, overlap=0.5 * duration)
+        epochs = mne.make_fixed_length_epochs(both, duration=duration, overlap=0.5 * duration * 0)
+
+        return epochs
+
+
+class DaspsSubject:
+    subject_id: int
+
+    def __init__(self, subject_id: int):
+        self.subject_id = subject_id
+
+    def get_epochs_custom_cleaned(self):
+        pass
+
+        # fname = os.path.join(DATA_PATH, 'raw_edf', 'S' + str(self.subject_id).zfill(2) + ".edf")
+
+        # raw = mne.io.read_raw_edf(fname, preload=True)
+        # raw = raw.filter(l_freq=0.5, h_freq=40, picks=CHANNEL_NAMES)
+
+        # print(raw.info)
+
+        # raw = raw.pick(CHANNEL_NAMES)
+
+        # raw.plot(n_channels=14, duration=30, scalings=200e-6)
+        # plt.show()
+        # return raw
+
+    def get_epochs(self):
+        epochs = get_subject_epochs(self.subject_id)
 
         return epochs
 
 
 class DaspsPreprocessor:
     @staticmethod
-    def get_situations() -> list[DaspsSituation]:
-        situations: list[DaspsSituation] = []
+    def get_trials() -> list[DaspsTrial]:
+        situations: list[DaspsTrial] = []
 
-        with open('data/DASPS.csv') as f:
+        with open('../data/DASPS.csv') as f:
             reader = csv.DictReader(f)
 
             for row in reader:
-                subject_id = row['Id Participant'] or situations[-1].id_
+                _stripped = row['Id Participant'].strip('S')
+
+                subject_id = int(_stripped) if _stripped else situations[-1].subject_id
                 sit_index = int(row['Id situation ']) - 1
                 valence = int(row['valence'])
                 arousal = int(row['Arousal'])
 
-                situation = DaspsSituation(
+                situation = DaspsTrial(
                     subject_id, sit_index, valence, arousal)
 
                 situations.append(situation)
@@ -128,62 +167,46 @@ class DaspsPreprocessor:
         return situations
 
     @staticmethod
-    def get_severe_moderate_sits() -> list[DaspsSituation]:
-        situations = DaspsPreprocessor.get_situations()
-
-        severe_moderate_situations = []
-
-        for sit in situations:
-            label = sit.get_sam_label()
-
-            if label in [Severity.SEVERE, Severity.MODERATE]:
-                severe_moderate_situations.append(sit)
-
-        # print(list(map(lambda x: x.id_, severe_moderate_situations)))
-
-        return severe_moderate_situations
+    def get_ha_sam_trials() -> list[DaspsTrial]:
+        return [i for i in DaspsPreprocessor.get_trials() if i.sam_label in [Severity.SEVERE, Severity.MODERATE]]
 
     @staticmethod
-    def get_normal_sits() -> list[DaspsSituation]:
-        situations = DaspsPreprocessor.get_situations()
-
-        normal_situations = []
-
-        for sit in situations:
-            label = sit.get_sam_label()
-
-            if label == Severity.NORMAL:
-                normal_situations.append(sit)
-
-        # print(list(map(lambda x: x.id_, severe_moderate_situations)))
-
-        return normal_situations
+    def get_la_sam_trials() -> list[DaspsTrial]:
+        return [i for i in DaspsPreprocessor.get_trials() if i.sam_label in [Severity.NORMAL]]
 
     @staticmethod
-    def _get_normal_epochs(duration, autoreject=False) -> mne.EpochsArray:
-        normal_sits = DaspsPreprocessor.get_normal_sits()
-
-        epochs = mne.concatenate_epochs(
-            [sit.get_epoch_array(duration) for sit in normal_sits])
-
-        if autoreject:
-            ar = AutoReject()
-            epochs = ar.fit_transform(epochs)
-
-        return epochs
+    def get_ha_ham_subjects() -> list[DaspsSubject]:
+        return [DaspsSubject(i) for i in HAM_HA_SUBJECTS]
 
     @staticmethod
-    def _get_severe_moderate_epochs(duration, autoreject=False) -> mne.EpochsArray:
-        severe_moderate_sits = DaspsPreprocessor.get_severe_moderate_sits()
+    def get_la_ham_subjects() -> list[DaspsSubject]:
+        return [DaspsSubject(i) for i in HAM_LA_SUBJECTS]
 
-        epochs = mne.concatenate_epochs(
-            [sit.get_epoch_array(duration) for sit in severe_moderate_sits])
+    # @staticmethod
+    # def _get_normal_epochs(duration, autoreject=False) -> mne.EpochsArray:
+    #     normal_sits = DaspsPreprocessor.get_normal_sits()
 
-        if autoreject:
-            ar = AutoReject()
-            epochs = ar.fit_transform(epochs)
+    #     epochs = mne.concatenate_epochs(
+    #         [sit.get_epoch_array(duration) for sit in normal_sits])
 
-        return epochs
+    #     if autoreject:
+    #         ar = AutoReject()
+    #         epochs = ar.fit_transform(epochs)
+
+    #     return epochs
+
+    # @staticmethod
+    # def _get_severe_moderate_epochs(duration, autoreject=False) -> mne.EpochsArray:
+    #     severe_moderate_sits = DaspsPreprocessor.get_severe_moderate_sits()
+
+    #     epochs = mne.concatenate_epochs(
+    #         [sit.get_epoch_array(duration) for sit in severe_moderate_sits])
+
+    #     if autoreject:
+    #         ar = AutoReject()
+    #         epochs = ar.fit_transform(epochs)
+
+    #     return epochs
 
     # @staticmethod
     # def _get_interval_from_seconds(seconds):
@@ -203,7 +226,7 @@ class DaspsPreprocessor:
     #     return seconds_start, seconds_end
 
     @staticmethod
-    def get_trials(duration: int, autoreject=False):
+    def get_trials_(duration: int, autoreject=False):
         normal_epochs = DaspsPreprocessor._get_normal_epochs(duration, autoreject=autoreject)
         anx_epochs = DaspsPreprocessor._get_severe_moderate_epochs(duration, autoreject=autoreject)
 
@@ -215,25 +238,3 @@ class DaspsPreprocessor:
                       for i in range(len(anx_epochs))]
 
         return normal_trials + anx_trials
-
-
-if __name__ == '__main__':
-    # severe_moderate_sits = DaspsPreprocessor.get_severe_moderate_sits()
-    # normal_sits = DaspsPreprocessor.get_normal_sits()
-
-    # severe_moderate_epochs = mne.concatenate_epochs(
-    #     [sit.get_both_epochs() for sit in severe_moderate_sits])
-
-    # normal_epochs = mne.concatenate_epochs(
-    #     [sits.get_both_epochs() for sits in normal_sits])
-
-    # # severe_moderate_epochs.compute_psd().plot()
-    # # normal_epochs.compute_psd().plot()
-
-    # # print(len(normal_epochs))
-    # # print(len(severe_moderate_epochs))
-
-    # # severe_moderate_epochs.compute_tfr('morlet', np.arange(1, 30, 5))[0].plot()
-
-    # plt.show()
-    pass
