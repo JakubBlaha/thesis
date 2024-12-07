@@ -26,6 +26,7 @@ xgboost = "*"
 torcheval = "*"
 tqdm = "*"
 pyqt5 = "*"
+seaborn = "*"
 
 [dev-packages]
 ipykernel = "*"
