@@ -7,7 +7,7 @@ import mne_connectivity
 import numpy as np
 import pandas as pd
 
-from constants import CHANNEL_NAMES, TARGET_SAMPLING_FREQ as sfreq
+from .constants import CHANNEL_NAMES, TARGET_SAMPLING_FREQ as sfreq, SAD_MULTIPLY_FACTOR
 
 n_channels = len(CHANNEL_NAMES)
 freq_bands = {
@@ -156,6 +156,9 @@ def get_features_of_all_epochs(path) -> pd.DataFrame:
 
         if "sam" in meta.columns:
             sam_label = meta.iloc[index]["sam"]
+
+        if dataset == "SAD":
+            epoch = (epoch.T * SAD_MULTIPLY_FACTOR).T  # type: ignore
 
         d = get_epoch_features(epoch)
 

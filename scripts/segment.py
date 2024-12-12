@@ -6,7 +6,7 @@ import pandas as pd
 import csv
 import os
 
-from constants import TARGET_SAMPLING_FREQ as FS
+from .constants import TARGET_SAMPLING_FREQ as FS
 
 script_dirname = os.path.dirname(os.path.abspath(__file__))
 
@@ -55,6 +55,8 @@ def get_sam_label(valence, arousal):
 
 
 def add_sam_labels(epochs, subject_id, seconds_per_epoch):
+    global situations
+
     samples_per_situation = FS * 30
     samples_per_epoch = FS * seconds_per_epoch
 
@@ -134,6 +136,16 @@ def segment_sad(path, seconds_per_epoch, overlap, res_dir):
     epochs.save(new_path, overwrite=True)
 
 
+def validate_seglen(seglen):
+    assert seglen > 0, "Segment length must be greater than 0"
+
+    assert seglen <= 30, "Segment length must be less than or equal to 30"
+
+    assert 30 % seglen == 0, (
+        "Cannot segment into epochs that would match the DASPS situation length. " +
+        "Please change SECONDS_PER_EPOCH to a divisor of 30")
+
+
 def segment(seconds_per_epoch: int):
     res_dir = os.path.join(
         script_dirname, f"../data/segmented/{seconds_per_epoch}s/raw/")
@@ -141,9 +153,7 @@ def segment(seconds_per_epoch: int):
 
     paths = glob.glob(os.path.abspath(os.path.join("../data/fif/S???.fif")))
 
-    assert 30 % seconds_per_epoch == 0, (
-        "Cannot segment into epochs that would match the DASPS situation length. " +
-        "Please change SECONDS_PER_EPOCH to a divisor of 30")
+    validate_seglen(seconds_per_epoch)
 
     for path in paths:
         s_number = path.split('/')[-1].split('.')[0][1:]
@@ -156,8 +166,9 @@ def segment(seconds_per_epoch: int):
             segment_sad(*args)
 
 
+situations = parse_dasps_situations()
+
 if __name__ == "__main__":
-    situations = parse_dasps_situations()
     segment(3)
 
 # %%

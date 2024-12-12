@@ -6,11 +6,11 @@ import numpy as np
 import pandas as pd
 import glob
 
-from constants import CHANNEL_NAMES, TARGET_SAMPLING_FREQ
+from .constants import CHANNEL_NAMES, TARGET_SAMPLING_FREQ
 
 DASPS_PREP_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__),
-                 "../data/dasps/raw_mat"))
+                 "../data/datasets/DASPS"))
 
 SAD_PREP_PATH = os.path.abspath(os.path.join(
     os.path.dirname(__file__),
@@ -66,7 +66,7 @@ def convert_dasps_to_fif():
     os.makedirs(FIF_DATA_PATH, exist_ok=True)
 
     for fname in os.listdir(DASPS_PREP_PATH):
-        subject_id = int(fname.strip(".mat").strip("S"))
+        subject_id = int(fname.strip("preprocessed.mat").strip("S"))
 
         # Get epochs
         epochs = get_epochs_from_mat(fname, subject_id)
