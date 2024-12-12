@@ -1,6 +1,10 @@
 # %%
 import pandas as pd
+import os
+import glob
 from enum import Enum
+
+from .constants import features_dir
 
 
 class DaspsLabeling(Enum):
@@ -35,8 +39,18 @@ class LabelingScheme:
         self.hi_level_sad = hi_level_sad
 
 
+def get_extracted_seglens():
+    paths = glob.glob(os.path.join(features_dir, 'features_*s.csv'))
+    basenames = [os.path.basename(i) for i in paths]
+
+    seglens = [i.strip("features_").strip("s.csv") for i in basenames]
+    seglens = [int(i) for i in seglens]
+
+    return seglens
+
+
 def get_feats_csv_path(seglen: int):
-    return f'../data/features/features_{seglen}s.csv'
+    return os.path.join(features_dir, f'features_{seglen}s.csv')
 
 
 class BaseDatasetBuilder:
@@ -126,7 +140,7 @@ class DatasetBuilder(BaseDatasetBuilder):
         df = df.copy()
 
         # Add a column for label
-        df['label'] = -1
+        df['label'] = ""
 
         for i, row in df.iterrows():
             dataset = row['dataset']
@@ -138,7 +152,7 @@ class DatasetBuilder(BaseDatasetBuilder):
             else:
                 raise ValueError(f'Invalid dataset {dataset}')
 
-            df.at[i, 'label'] = label.value
+            df.at[i, 'label'] = label.name
 
         return df
 

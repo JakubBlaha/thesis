@@ -151,9 +151,16 @@ def segment(seconds_per_epoch: int):
         script_dirname, f"../data/segmented/{seconds_per_epoch}s/raw/")
     os.makedirs(res_dir, exist_ok=True)
 
-    paths = glob.glob(os.path.abspath(os.path.join("../data/fif/S???.fif")))
+    fif_pattern = os.path.abspath(os.path.join(
+        script_dirname, "../data/fif/S???.fif"))
+    paths = glob.glob(fif_pattern)
+
+    print(script_dirname)
+    print(fif_pattern)
 
     validate_seglen(seconds_per_epoch)
+
+    print(paths)
 
     for path in paths:
         s_number = path.split('/')[-1].split('.')[0][1:]

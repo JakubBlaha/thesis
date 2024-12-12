@@ -14,7 +14,7 @@ DASPS_PREP_PATH = os.path.abspath(
 
 SAD_PREP_PATH = os.path.abspath(os.path.join(
     os.path.dirname(__file__),
-    "../data/SAD/preprocessed"))
+    "../data/datasets/SAD/preprocessed"))
 
 severity_to_number = {
     "control": 1,
@@ -62,10 +62,17 @@ def get_epochs_from_mat(fname, subject_id):
     return epochs
 
 
-def convert_dasps_to_fif():
+def _ensure_fif_dir():
     os.makedirs(FIF_DATA_PATH, exist_ok=True)
 
-    for fname in os.listdir(DASPS_PREP_PATH):
+
+def convert_dasps_to_fif():
+    _ensure_fif_dir()
+
+    mat_paths = glob.glob(DASPS_PREP_PATH + "/*.mat")
+
+    for path in mat_paths:
+        fname = os.path.basename(path)
         subject_id = int(fname.strip("preprocessed.mat").strip("S"))
 
         # Get epochs
@@ -85,6 +92,8 @@ def convert_dasps_to_fif():
 
 # -------------- SAD specific ---------------
 def convert_sad_to_fif():
+    _ensure_fif_dir()
+
     edf_paths = glob.glob(SAD_PREP_PATH + "/*/*.edf")
 
     for path in edf_paths:

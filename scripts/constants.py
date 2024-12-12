@@ -1,3 +1,5 @@
+import os
+
 TARGET_SAMPLING_FREQ = 128
 CHANNEL_NAMES = ['AF3', 'F7', 'F3', 'FC5', 'T7',
                  'P7', 'O1', 'O2', 'P8', 'T8', 'FC6', 'F4', 'F8', 'AF4']
@@ -8,3 +10,6 @@ SAD_MULTIPLY_FACTOR = [[
     820319.16525026, 492788.73465691, 516559.65672999, 556667.14597337,
     701259.40813949, 978496.20791588, 613955.90236696, 531714.89132713,
     730925.92311765, 651757.99481499]]
+
+package_dir = os.path.dirname(os.path.abspath(__file__))
+features_dir = os.path.join(package_dir, "../data/features")
