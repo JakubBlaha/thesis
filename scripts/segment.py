@@ -120,8 +120,8 @@ def segment_sad(path, seconds_per_epoch, overlap, res_dir):
 
     # Severity for SAD is represented by the first digit in the filename, lowest severity starts at 1
     # therefore we substract one to make it consistent with DASPS
-    severity = int(path.split('/')[-1].split('.')[0][1]) - 1
-    subject_id = int(path.split('/')[-1].split('.')[0][1:])
+    severity = int(os.path.basename(path).split('.')[0][1]) - 1
+    subject_id = int(os.path.basename(path).split('.')[0][1:])
 
     # Set metadata for each epoch
     metadata = {
