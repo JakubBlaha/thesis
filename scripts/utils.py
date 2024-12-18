@@ -56,7 +56,7 @@ def get_feats_csv_path(seglen: int):
 class BaseDatasetBuilder:
     def _drop_redundant_columns(self, df: pd.DataFrame) -> pd.DataFrame:
         return df.drop(columns=['dataset', 'ham', 'sam',
-                                'stai', 'uniq_subject_id', 'subject'])
+                                'stai', 'subject'])
 
     def _get_seglen_df(self, seglen: int) -> pd.DataFrame:
         path = get_feats_csv_path(seglen)
@@ -80,29 +80,29 @@ class DatasetBuilder(BaseDatasetBuilder):
         self._labeling_scheme = labeling_scheme
 
     def build_dataset_df(
-            self, seglen: int) -> pd.DataFrame:
+            self, seglen: int, mode="both") -> pd.DataFrame:
+
         df = self._get_seglen_df(seglen)
         df = self._label_rows(df)
+        df = self._keep_mode_rows(df, mode)
         df = self._drop_redundant_columns(df)
 
-        self._feat_names = df.columns.tolist()[:-1]
+        self._feat_names = df.columns.tolist()[:-2]
 
         return df
 
     def build_dataset_arrs(self, seglen: int):
         df = self.build_dataset_df(seglen)
 
-        # Return three numpy arrays, one for each label
-        control = df[df['label'] == DatasetLabel.CONTROL.value].to_numpy()
-        gad = df[df['label'] == DatasetLabel.GAD.value].to_numpy()
-        sad = df[df['label'] == DatasetLabel.SAD.value].to_numpy()
+        control_df = df[df['label'] == DatasetLabel.CONTROL.value]
+        gad_df = df[df['label'] == DatasetLabel.GAD.value]
+        sad_df = df[df['label'] == DatasetLabel.SAD.value]
 
-        # Remove label (last) column
-        control = control[:, :-1]
-        gad = gad[:, :-1]
-        sad = sad[:, :-1]
+        control_df = control_df.drop(columns=['label', 'uniq_subject_id'])
+        gad_df = gad_df.drop(columns=['label', 'uniq_subject_id'])
+        sad_df = sad_df.drop(columns=['label', 'uniq_subject_id'])
 
-        return control, gad, sad
+        return control_df.to_numpy(), gad_df.to_numpy(), sad_df.to_numpy()
 
     def build_control_dataset_df(self, seglen: int) -> pd.DataFrame:
         df = self._get_seglen_df(seglen)
@@ -116,25 +116,40 @@ class DatasetBuilder(BaseDatasetBuilder):
 
         df = self._drop_redundant_columns(df)
 
-        self._feat_names = df.columns.tolist()[:-1]
+        self._feat_names = df.columns.tolist()[:-2]
 
         return df
 
     def build_control_dataset_arrs(self, seglen: int):
         df = self.build_control_dataset_df(seglen)
 
-        # Return two numpy arrays, one for each dataset
-        dasps = df[df['label'] == DatasetEnum.DASPS.value].to_numpy()
-        sad = df[df['label'] == DatasetEnum.SAD.value].to_numpy()
+        # label is a DatasetEnum value
+        dasps_df = df[df['label'] == DatasetEnum.DASPS.value]
+        sad_df = df[df['label'] == DatasetEnum.SAD.value]
 
-        # Remove label (last) column
-        dasps = dasps[:, :-1]
-        sad = sad[:, :-1]
+        # Remove label and uniq_subject_id
+        dasps_df = dasps_df.drop(columns=['label', 'uniq_subject_id'])
+        sad_df = sad_df.drop(columns=['label', 'uniq_subject_id'])
 
-        return dasps, sad
+        return dasps_df.to_numpy(), sad_df.to_numpy()
 
     def get_feat_names(self):
         return self._feat_names
+
+    def _keep_mode_rows(self, df: pd.DataFrame, mode: str) -> pd.DataFrame:
+        _valid_modes = ["both", "dasps", "sad"]
+
+        assert mode in _valid_modes, "mode must be one of " + str(
+            _valid_modes)
+
+        if mode == "both":
+            return df
+        elif mode == "dasps":
+            return df[df['dataset'] == 'dasps']
+        elif mode == "sad":
+            return df[df['dataset'] == 'SAD']
+
+        raise ValueError(f'Invalid mode: {mode}')
 
     def _label_rows(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
@@ -152,7 +167,7 @@ class DatasetBuilder(BaseDatasetBuilder):
             else:
                 raise ValueError(f'Invalid dataset {dataset}')
 
-            df.at[i, 'label'] = label.name
+            df.at[i, 'label'] = label.value
 
         return df
 
