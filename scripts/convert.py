@@ -5,6 +5,7 @@ import h5py
 import numpy as np
 import pandas as pd
 import glob
+from matplotlib import pyplot as plt
 
 from .constants import CHANNEL_NAMES, TARGET_SAMPLING_FREQ
 
@@ -53,8 +54,16 @@ def get_epochs_from_mat(fname, subject_id):
         {"subject": [subject_id] * len(epochs),
          "dataset": ["dasps"] * len(epochs)})
 
+    # epochs.compute_psd(fmin=0, fmax=64).plot()
+    # plt.show()
+
     # Filtering
-    epochs = epochs.filter(l_freq=4, h_freq=30)
+    epochs.filter(l_freq=4, h_freq=30)
+    epochs.filter(l_freq=52, h_freq=48,
+                  l_trans_bandwidth=1, h_trans_bandwidth=1)
+
+    # epochs.compute_psd(fmin=0, fmax=64).plot(dB=False)
+    # plt.savefig("./figures/DASPS/psd/" + str(subject_id) + ".png", dpi=300)
 
     # Re-reference to average
     epochs.set_eeg_reference("average", projection=False)
@@ -94,9 +103,9 @@ def convert_dasps_to_fif():
 def convert_sad_to_fif():
     _ensure_fif_dir()
 
-    edf_paths = glob.glob(SAD_PREP_PATH + "/*/*.edf")
+    edf_paths = sorted(glob.glob(SAD_PREP_PATH + "/*/*.edf"))
 
-    for path in edf_paths:
+    for index, path in enumerate(edf_paths):
         # Data are already re-referenced to average reference
         raw = mne.io.read_raw_edf(path, preload=True)
 
@@ -111,14 +120,25 @@ def convert_sad_to_fif():
 
         raw.set_montage("standard_1020")
 
+        # raw.compute_psd(fmin=0, fmax=64).plot()
+        # plt.show()
+
+        # Apply a filter of 4 -- 30 Hz, as done in the DASPS preprocessed dataset
+        raw.filter(l_freq=4, h_freq=30)
+        raw.filter(l_freq=52, h_freq=48,
+                   l_trans_bandwidth=1, h_trans_bandwidth=1)
+
         # Downsample to 128 Hz
         raw = raw.resample(128)
 
-        # Apply a filter of 4 -- 30 Hz, as done in the DASPS preprocessed dataset
-        raw = raw.filter(4, 30)
-
         # Re-reference to average reference after dropping channels
         raw.set_eeg_reference("average", projection=False)
+
+        # Rescale the data to the same scale as DASPS
+        raw._data *= 1e6
+
+        # raw.compute_psd(fmin=0, fmax=64).plot(dB=False)
+        # plt.savefig("./figures/SAD/psd/" + str(index) + ".png", dpi=300)
 
         # Get subject number
         s_number = path.split("/")[-1].split(".")[0].replace("C", "")
