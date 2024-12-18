@@ -163,7 +163,8 @@ def segment(seconds_per_epoch: int):
     print(paths)
 
     for path in paths:
-        s_number = path.split('/')[-1].split('.')[0][1:]
+        basename = os.path.basename(path)
+        s_number = basename.split('.')[0][1:]
 
         args = [path, seconds_per_epoch, 0, res_dir]
 
