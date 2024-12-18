@@ -7,7 +7,7 @@ import mne_connectivity
 import numpy as np
 import pandas as pd
 
-from .constants import CHANNEL_NAMES, TARGET_SAMPLING_FREQ as sfreq, SAD_MULTIPLY_FACTOR
+from constants import CHANNEL_NAMES, TARGET_SAMPLING_FREQ as sfreq, SAD_MULTIPLY_FACTOR
 
 n_channels = len(CHANNEL_NAMES)
 freq_bands = {

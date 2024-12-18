@@ -1,8 +1,8 @@
 import itertools
 import os
 
-from .utils import DatasetBuilder, LabelingScheme, DaspsLabeling, get_extracted_seglens
-from .constants import features_dir
+from utils import DatasetBuilder, LabelingScheme, DaspsLabeling, get_extracted_seglens
+from constants import features_dir
 
 
 def make_labeled_csv_files():

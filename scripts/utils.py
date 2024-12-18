@@ -4,7 +4,7 @@ import os
 import glob
 from enum import Enum
 
-from .constants import features_dir
+from constants import features_dir
 
 
 class DaspsLabeling(Enum):

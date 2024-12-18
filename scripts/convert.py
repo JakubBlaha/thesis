@@ -7,7 +7,7 @@ import pandas as pd
 import glob
 from matplotlib import pyplot as plt
 
-from .constants import CHANNEL_NAMES, TARGET_SAMPLING_FREQ
+from constants import CHANNEL_NAMES, TARGET_SAMPLING_FREQ
 
 DASPS_PREP_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__),

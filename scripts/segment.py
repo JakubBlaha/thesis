@@ -6,7 +6,7 @@ import pandas as pd
 import csv
 import os
 
-from .constants import TARGET_SAMPLING_FREQ as FS
+from constants import TARGET_SAMPLING_FREQ as FS
 
 script_dirname = os.path.dirname(os.path.abspath(__file__))
 
@@ -176,6 +176,6 @@ def segment(seconds_per_epoch: int):
 situations = parse_dasps_situations()
 
 if __name__ == "__main__":
-    segment(3)
+    segment(10)
 
 # %%

@@ -1,11 +1,12 @@
 import argparse
 import logging
 
-from .convert import convert_dasps_to_fif, convert_sad_to_fif
-from .segment import segment, validate_seglen
-from .autoreject_runner import run_autoreject
-from .extract_features import extract_features_from_all_segments
-from .label import make_labeled_csv_files
+from convert import convert_dasps_to_fif, convert_sad_to_fif
+from segment import segment, validate_seglen
+from autoreject_runner import run_autoreject
+from extract_features import extract_features_from_all_segments
+from label import make_labeled_csv_files
+from training import train_models
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -16,8 +17,8 @@ def main():
 
     subparsers = parser.add_subparsers(dest="command")
 
-    available_commands = ["convert", "segment",
-                          "autoreject", "extract", "label", "all"]
+    available_commands = ["all", "convert", "segment",
+                          "autoreject", "extract", "label", "train"]
 
     cmd_parsers = {}
 
@@ -67,6 +68,10 @@ def main():
         make_labeled_csv_files()
 
         logger.info("Labeling completed.")
+
+    if args.command == "train" or _run_all:
+        train_models()
+        logger.info("Training completed.")
 
 
 if __name__ == '__main__':
