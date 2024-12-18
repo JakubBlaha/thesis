@@ -140,11 +140,11 @@ def convert_sad_to_fif():
         # raw.compute_psd(fmin=0, fmax=64).plot(dB=False)
         # plt.savefig("./figures/SAD/psd/" + str(index) + ".png", dpi=300)
 
-        # Get subject number
-        s_number = path.split("/")[-1].split(".")[0].replace("C", "")
+        # Get subject number from basename
+        s_number = os.path.basename(path).split(".")[0].replace("C", "")
 
         # Get severity
-        s_severity = path.split("/")[-2]
+        s_severity = os.path.basename(os.path.dirname(path))
         s_severity_as_number = severity_to_number[s_severity]
 
         # Save as ScXX.fif, denoting the SAD dataset, where
