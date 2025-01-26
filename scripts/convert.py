@@ -35,6 +35,9 @@ DASPS_HAM_SEVERITY_SUBJECTS_MAP = {
     3: [1, 2, 3, 4, 5, 6, 7, 12, 16, 17, 19, 20, 22]
 }
 
+LFREQ = 4
+HFREQ = 40
+
 
 def get_epochs_from_mat(fname, subject_id):
     fname = os.path.join(DASPS_PREP_PATH, fname)
@@ -54,11 +57,11 @@ def get_epochs_from_mat(fname, subject_id):
         {"subject": [subject_id] * len(epochs),
          "dataset": ["dasps"] * len(epochs)})
 
-    # epochs.compute_psd(fmin=0, fmax=64).plot()
+    epochs.compute_psd(fmin=0, fmax=64).plot()
     # plt.show()
 
     # Filtering
-    epochs.filter(l_freq=4, h_freq=30)
+    epochs.filter(l_freq=LFREQ, h_freq=HFREQ)
     epochs.filter(l_freq=52, h_freq=48,
                   l_trans_bandwidth=1, h_trans_bandwidth=1)
 
@@ -121,10 +124,9 @@ def convert_sad_to_fif():
         raw.set_montage("standard_1020")
 
         # raw.compute_psd(fmin=0, fmax=64).plot()
-        # plt.show()
 
-        # Apply a filter of 4 -- 30 Hz, as done in the DASPS preprocessed dataset
-        raw.filter(l_freq=4, h_freq=30)
+        # Filtering
+        raw.filter(l_freq=LFREQ, h_freq=HFREQ)
         raw.filter(l_freq=52, h_freq=48,
                    l_trans_bandwidth=1, h_trans_bandwidth=1)
 
@@ -158,5 +160,7 @@ def convert_sad_to_fif():
 if __name__ == "__main__":
     convert_dasps_to_fif()
     convert_sad_to_fif()
+
+    # plt.show()
 
 # %%
