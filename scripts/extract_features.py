@@ -96,7 +96,7 @@ def get_epoch_features(epoch):
         (max_freq - min_freq) * 4 + 1))
 
     res = mne_connectivity.spectral_connectivity_time(
-        epoch, freqs=freqs, method="pli", sfreq=sfreq, mode="cwt_morlet",
+        epoch, freqs=freqs, method="wpli", sfreq=sfreq, mode="cwt_morlet",
         fmin=min_freqs, fmax=max_freqs, faverage=True).get_data()
 
     conn_of_one_epoch = res[0]
@@ -118,7 +118,8 @@ def get_epoch_features(epoch):
             left_abs_pow = d['abs_pow_' + band_name + '_' + left_ch_name]
             right_abs_pow = d['abs_pow_' + band_name + '_' + right_ch_name]
 
-            asym_idx = np.log(right_abs_pow) - np.log(left_abs_pow)
+            asym_idx = (
+                left_abs_pow - right_abs_pow) / (left_abs_pow + right_abs_pow)
 
             d[f'ai_{band_name}_{right_ch_name}-{left_ch_name}'] = asym_idx
 
