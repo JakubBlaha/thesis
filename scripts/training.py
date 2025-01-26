@@ -9,6 +9,7 @@ from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.pipeline import Pipeline
 
 from utils import DatasetBuilder, LabelingScheme, DaspsLabeling
+from tabulate import tabulate
 
 
 def train_models():
@@ -17,7 +18,7 @@ def train_models():
     labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
     builder = DatasetBuilder(labeling_scheme)
 
-    df = builder.build_dataset_df(10, mode='dasps')
+    df = builder.build_dataset_df(10, mode='dasps', domains=["time"])
 
     print("Working with following features:")
     print(*df.columns)
@@ -59,7 +60,7 @@ def train_models():
         # 'feature_selection__k': [8],
         'svm__C': np.logspace(-2, 5, 8),
         'svm__gamma': np.logspace(-9, 0, 10),
-        'svm__kernel': ['linear'],
+        'svm__kernel': ['rbf'],
     }
 
     # Create pipeline with feature selection and SVM
@@ -79,19 +80,44 @@ def train_models():
     scores = cross_val_score(best_estimator, features, labels,
                              groups=groups, cv=cv, verbose=10, n_jobs=None)
 
+    print("Searched parameters grid:")
+    param_table = {
+        "Parameter": list(param_grid.keys()),
+        "Values": [str(values) for values in param_grid.values()]
+    }
+    print(tabulate(param_table, headers="keys",
+          tablefmt="pretty", maxcolwidths=30))
+
     # Print selected features
     selected_features = search.best_estimator_.named_steps['feature_selection']
     selected_mask = selected_features.get_support()
     print("Number of selected features:", sum(selected_mask))
+
+    # Selected features
+    selected_features_names = df.columns[selected_mask]
+    selected_features_table = {
+        "Index": range(len(selected_features_names)),
+        "Feature Name": selected_features_names
+    }
+
     print("Selected features:")
-    print(df.columns[selected_mask])
+    print(tabulate(selected_features_table, headers="keys", tablefmt="pretty"))
 
-    print("Best parameters:", search.best_params_)
-    print("Best score:", search.best_score_)
+    print("Best parameters:")
+    best_params = {
+        "Parameter": list(search.best_params_.keys()),
+        "Value": list(search.best_params_.values())
+    }
 
-    print("Mean accuracy: ", scores.mean())
-    print("Std accuracy: ", scores.std())
+    print(tabulate(best_params, headers="keys", tablefmt="pretty"))
 
+    # Print scores as a table
+    score_results = {
+        "Metric": ["Best score", "Mean accuracy", "Std accuracy"],
+        "Value": [round(i, 3) for i in [search.best_score_, scores.mean(), scores.std()]]
+    }
+
+    print(tabulate(score_results, headers="keys", tablefmt="pretty"))
 
 # - Use a custom scoring function (for example balanced accuracy)
 # - Define a grid of params for SVM
