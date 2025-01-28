@@ -182,8 +182,6 @@ class DatasetBuilder(BaseDatasetBuilder):
             f_val, p_val = f_oneway(*[group[col] for group in nonempty_groups])
             p_vals[col] = p_val
 
-        # print(p_vals)
-
         for col in control.columns:
             is_feature = any([col.startswith(d)
                              for d in self._feat_domain_prefix])

@@ -40,22 +40,22 @@ GRID = {
             "classif__gamma": [10**i for i in range(-9, 0)],
             "classif__kernel": ['poly'],
             "classif__degree": [2, 3, 4],
-            "sel__k": [5, 8, 10, 20, 30, 40, 60, "all"]
+            "sel__k": [20, 30, 40, 60, "all"]
         }
     },
     # Random forest works best with
     "rf": {
         "classif": RandomForestClassifier,
         "params": {
-            "classif__n_estimators": [300],
+            "classif__n_estimators": [200, 300, 400],
             "classif__max_depth": [5, 6, 8, 10, 15, 20],
             # "min_samples_split": [2, 5, 10],
             # "min_samples_leaf": [1, 2, 4],
             # "max_features": ['auto', 'sqrt', 'log2'],
-            "sel__k": [5, 8, 10, 20, 30, 40, 60]
+            "sel__k": [5, 10, 20, 40, 60, "all"]
         }
     },
-    "nb-gauss": {
+    "nb": {
         "classif": GaussianNB,
         "params": {
             "classif__var_smoothing": [10**i for i in range(-9, 0)],
@@ -65,41 +65,61 @@ GRID = {
     "knn": {
         "classif": KNeighborsClassifier,
         "params": {
-            "sel__k": [5, 8, 10, 20, 30, 40, 60]
+            "sel__k": [1, 2, 3, 4, 5, 8, 10, 20, 30, 40, 60]
         }
     },
     "mlp": {
         "classif": MLPClassifier,
         "params": {
-            "classif__hidden_layer_sizes": [(20,), (10,)],
+            "classif__hidden_layer_sizes": [(30,), (20,), (10,)],
             "classif__activation": ['relu'],
             "classif__solver": ['adam'],
             "classif__alpha": [10**i for i in range(-9, -5)],
             "classif__learning_rate": ['constant'],
             "classif__max_iter": [2000],
-            "sel__k": ["all"]
+            "sel__k": [20, 40, 60, "all"]
         },
     },
     "lda": {
         "classif": LinearDiscriminantAnalysis,
         "params": {
-            "sel__k": [5, 8, 10, 20, 30, 40, 60]
+            # "classif__solver": ['svd', 'lsqr', 'eigen'],
+            "classif__solver": ['lsqr'],
+            # "classif__shrinkage": [None, 'auto'] + [i/10.0 for i in range(1, 10)],
+            "classif__shrinkage": ['auto'],
+            # "classif__tol": [10**i for i in range(-9, 0)],
+            # "classif__n_components": [1, 2, 3, 5, None],
+            # "sel__k": [5, 8, 10, 20, 30, 40, 60, "all"],
+            "sel__k": [20, 40, 60, "all"],
         }
     }
 }
 
-classif = "lda"
+# Classifier
+classif = "svm-rbf"
+
+# Segment length
 seglen = 10
-mode = "dasps"
-# domains = ["rel_pow"]
-domains = ["rel_pow", "conn", "ai", "time"]
-labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
-domains += ['abs_pow']
+
+# Mode: gad, sad, both
+mode = "both"
+
+# Domains: abs_pow, rel_pow, conn, ai, time
+domains = ["rel_pow", "conn", "ai", "time", "abs_pow"]
+
+# Oversample: True, False
+oversample = True
+
+# DASPS labeling scheme: ham, sam
+dasps_labeling_scheme = "ham"
+
+# Cross validation: skf, logo
+cv = 'skf'
 
 verbosity = 0
 
 
-def oversample(features, labels, groups):
+def _oversample(features, labels, groups):
     label_counts = np.bincount(labels)
     max_label_count = np.max(label_counts)
 
@@ -123,7 +143,12 @@ def oversample(features, labels, groups):
 
 
 def train_models():
-    builder = DatasetBuilder(labeling_scheme)
+    if dasps_labeling_scheme == "ham":
+        _labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
+    elif dasps_labeling_scheme == "sam":
+        _labeling_scheme = LabelingScheme(DaspsLabeling.SAM)
+
+    builder = DatasetBuilder(_labeling_scheme)
 
     df = builder.build_dataset_df(
         seglen, mode=mode, domains=domains,
@@ -147,21 +172,22 @@ def train_models():
     df.drop(columns=['uniq_subject_id', 'label'], inplace=True)
 
     features = df.to_numpy()
-    features, labels, groups = oversample(features, labels, groups)
+
+    if oversample:
+        features, labels, groups = _oversample(features, labels, groups)
 
     n_feats = features.shape[1]
 
     print("Number of features:", n_feats)
 
     # Print mean of each feature
-    print("Mean of each feature:")
-    print(np.mean(features, axis=0))
+    # print("Mean of each feature:")
+    # print(np.mean(features, axis=0))
 
-    logo = LeaveOneGroupOut()
-    kfold = StratifiedKFold(n_splits=10)
-
-    # Select cross validation
-    cv = kfold
+    if cv == 'logo':
+        _cv = LeaveOneGroupOut()
+    elif cv == 'skf':
+        _cv = StratifiedKFold(n_splits=10)
 
     # splits = kfold.get_n_splits(features, labels)
 
@@ -189,14 +215,19 @@ def train_models():
     ])
 
     search = GridSearchCV(pipeline, param_grid,
-                          n_jobs=-1, verbose=verbosity, cv=cv)
+                          n_jobs=-1, verbose=verbosity, cv=_cv)
 
-    search.fit(features, labels)
+    _search_kw = {}
+
+    if cv == 'logo':
+        _search_kw['groups'] = groups
+
+    search.fit(features, labels, **_search_kw)
 
     best_estimator = search.best_estimator_
 
     scores = cross_val_score(
-        best_estimator, features, labels, groups=groups, cv=cv,
+        best_estimator, features, labels, groups=groups, cv=_cv,
         verbose=verbosity, n_jobs=None)
     # Output
     print("Label counts:")
@@ -243,6 +274,17 @@ def train_models():
     }
 
     print(tabulate(score_results, headers="keys", tablefmt="pretty"))
+
+    config_table = {
+        "Parameter": ["Classifier", "Mode", "CV", "Segment length", "Oversample", "Domains", "Labeling scheme"],
+        "Value": [classif, mode, cv, seglen, oversample, ", ".join(domains), dasps_labeling_scheme]
+    }
+
+    print("Configuration:")
+    print(
+        tabulate(
+            config_table, headers="keys", tablefmt="pretty",
+            maxcolwidths=30))
 
 # - Use a custom scoring function (for example balanced accuracy)
 # - Define a grid of params for SVM
