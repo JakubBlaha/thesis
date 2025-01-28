@@ -6,8 +6,11 @@ import mne_features
 import mne_connectivity
 import numpy as np
 import pandas as pd
+import logging
 
 from constants import CHANNEL_NAMES, TARGET_SAMPLING_FREQ as sfreq, SAD_MULTIPLY_FACTOR
+
+logger = logging.getLogger(__name__)
 
 n_channels = len(CHANNEL_NAMES)
 freq_bands = {
@@ -42,6 +45,8 @@ def get_epoch_features(epoch):
     epoch = np.expand_dims(epoch, axis=0)
 
     # Time complexity features
+    logging.info("Extracting time complexity features")
+
     funcs = [
         'hjorth_mobility', 'hjorth_complexity', 'variance', 'app_entropy',
         'line_length', 'skewness', 'kurtosis', 'rms', 'decorr_time',
@@ -57,6 +62,8 @@ def get_epoch_features(epoch):
             d[feat_name] = ch_val
 
     # Band power features
+    logging.info("Extracting band power features")
+
     for normalize in [False, True]:
         freq_bands_ = np.asanyarray(
             [freq_bands[band][0] for band in freq_bands] +
@@ -89,6 +96,8 @@ def get_epoch_features(epoch):
                 d[feat_name] = band_pow
 
     # Connectivity features
+    logging.info("Extracting connectivity features")
+
     min_freq = min(min_freqs)
     max_freq = max(max_freqs)
 
@@ -97,7 +106,7 @@ def get_epoch_features(epoch):
 
     res = mne_connectivity.spectral_connectivity_time(
         epoch, freqs=freqs, method="wpli", sfreq=sfreq, mode="cwt_morlet",
-        fmin=min_freqs, fmax=max_freqs, faverage=True).get_data()
+        fmin=min_freqs, fmax=max_freqs, faverage=True, n_jobs=1, verbose=0).get_data()
 
     conn_of_one_epoch = res[0]
     matrix = conn_of_one_epoch.reshape(
@@ -113,6 +122,8 @@ def get_epoch_features(epoch):
                 d[feat_name] = el2
 
     # Asymmetry index features
+    logging.info("Extracting asymmetry index features")
+
     for band_name in freq_band_names:
         for left_ch_name, right_ch_name in zip(left_channels, right_channels):
             left_abs_pow = d['abs_pow_' + band_name + '_' + left_ch_name]

@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import glob
 from enum import Enum
+from scipy.stats import f_oneway
 
 from constants import features_dir
 
@@ -75,17 +76,22 @@ class BaseDatasetBuilder:
 # 2 - SAD
 class DatasetBuilder(BaseDatasetBuilder):
     _feat_names: list[str] = []
+    _feat_domain_prefix = ['time', 'abs_pow', 'rel_pow', 'conn', 'ai']
 
     def __init__(self, labeling_scheme: LabelingScheme) -> None:
         self._labeling_scheme = labeling_scheme
 
-    def build_dataset_df(
-            self, seglen: int, mode="both") -> pd.DataFrame:
+    def build_dataset_df(self, seglen: int, mode="both",
+                         domains:
+                         list[str] = ["time", "rel_pow", "conn", "ai"],
+                         p_val_thresh=0.05) -> pd.DataFrame:
 
         df = self._get_seglen_df(seglen)
         df = self._label_rows(df)
         df = self._keep_mode_rows(df, mode)
         df = self._drop_redundant_columns(df)
+        df = self._keep_feat_cols(df, domains)
+        df = self._keep_significant_cols(df, p_val_thresh)
 
         self._feat_names = df.columns.tolist()[:-2]
 
@@ -135,6 +141,57 @@ class DatasetBuilder(BaseDatasetBuilder):
 
     def get_feat_names(self):
         return self._feat_names
+
+    def _keep_feat_cols(
+            self, df: pd.DataFrame, domains: list[str]) -> pd.DataFrame:
+        assert all([d in self._feat_domain_prefix
+                    for d in domains]), "Invalid domain"
+
+        print("Keeping domains:", domains)
+
+        if len(domains) == 0:
+            domains += ["time", "rel_pow", "conn", "ai"]
+
+        domains += ['dataset', 'label', "uniq_subject_id"]
+
+        # Keep only the selected domains
+        cols = [col for col in df.columns if any(
+            [col.startswith(d) for d in domains])]
+
+        return df[cols]
+
+    def _get_feat_col_names(self, df: pd.DataFrame) -> list[str]:
+        return [col for col in df.columns if any(
+            [col.startswith(d) for d in self._feat_domain_prefix])]
+
+    def _keep_significant_cols(
+            self, df: pd.DataFrame, p_val_thresh: float) -> pd.DataFrame:
+        control = df[df['label'] == DatasetLabel.CONTROL.value].copy()
+        gad = df[df['label'] == DatasetLabel.GAD.value].copy()
+        sad = df[df['label'] == DatasetLabel.SAD.value].copy()
+
+        for group in [control, gad, sad]:
+            group.drop(columns=['label', 'uniq_subject_id'],
+                       inplace=True)
+
+        p_vals = {}
+
+        nonempty_groups = [i for i in [control, gad, sad] if not i.empty]
+
+        for col in control.columns:
+            f_val, p_val = f_oneway(*[group[col] for group in nonempty_groups])
+            p_vals[col] = p_val
+
+        # print(p_vals)
+
+        for col in control.columns:
+            is_feature = any([col.startswith(d)
+                             for d in self._feat_domain_prefix])
+
+            if p_vals[col] > p_val_thresh and is_feature:
+                df = df.drop(columns=[col])
+
+        return df
 
     def _keep_mode_rows(self, df: pd.DataFrame, mode: str) -> pd.DataFrame:
         _valid_modes = ["both", "dasps", "sad"]
@@ -206,10 +263,10 @@ if __name__ == "__main__":
     labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
     builder = DatasetBuilder(labeling_scheme)
 
-    df = builder.build_dataset_df(15)
+    df = builder.build_dataset_df(10)
 
     # Control dataset builder
-    dasps, sad = builder.build_control_dataset_arrs(15)
+    # dasps, sad = builder.build_control_dataset_arrs(15)
 
     print(dasps.shape)
     print(sad.shape)

@@ -17,8 +17,8 @@ def oversample(trials: list[Trial]):
     uniq_labels = list(set(labels))
 
     label_to_trial = {
-        label: list(filter(lambda t: t.trial_label == label, trials)) for label in uniq_labels
-    }
+        label: list(filter(lambda t: t.trial_label == label, trials))
+        for label in uniq_labels}
 
     max_len = max([len(i) for i in label_to_trial.values()])
 
@@ -37,7 +37,8 @@ def oversample(trials: list[Trial]):
 
 
 def train_eval_pytorch_model(
-        model, train_dataset, test_dataset, *, num_epochs=100, learning_rate=0.001, batch_size=32, last_epochs_avg=10):
+        model, train_dataset, test_dataset, *, num_epochs=100,
+        learning_rate=0.001, batch_size=32, last_epochs_avg=10):
     print("Train samples: ", len(train_dataset))
     print("Test samples: ", len(test_dataset))
 
@@ -50,7 +51,8 @@ def train_eval_pytorch_model(
     train_acc = []
     test_acc = []
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    train_loader = DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     for epoch in tqdm(range(num_epochs)):
@@ -115,4 +117,5 @@ def train_eval_pytorch_model(
     plt.plot(test_acc)
     plt.show()
 
-    print(f"Avg test acc last {last_epochs_avg} epochs: ", np.mean(test_acc[-last_epochs_avg:]))
+    print(f"Avg test acc last {last_epochs_avg}  epochs: ", np.mean(
+        test_acc[-last_epochs_avg:]))

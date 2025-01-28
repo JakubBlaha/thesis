@@ -27,6 +27,7 @@ torcheval = "*"
 tqdm = "*"
 pyqt5 = "*"
 seaborn = "*"
+tabulate = "*"
 
 [dev-packages]
 ipykernel = "*"
