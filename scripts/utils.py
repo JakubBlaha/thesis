@@ -1,4 +1,7 @@
 # %%
+import mne
+import numpy as np
+from torch.utils.data import Dataset
 import pandas as pd
 import os
 import glob
@@ -6,6 +9,8 @@ from enum import Enum
 from scipy.stats import f_oneway
 
 from constants import features_dir
+
+script_path = os.path.dirname(os.path.realpath(__file__))
 
 
 class DaspsLabeling(Enum):
@@ -255,18 +260,107 @@ class DatasetBuilder(BaseDatasetBuilder):
 
         raise ValueError(f'Invalid SAD severity: {severity}')
 
+    def build_deep_dataset(self, seglen: int, oversample=True):
+        clean_segdir_path = os.path.join(
+            script_path, f'../data/segmented/{seglen}s/clean')
+        files = glob.glob(f'{clean_segdir_path}/*-epo.fif')
+
+        data = []
+        labels = []
+        groups = []
+
+        for f in files:
+            epochs = mne.read_epochs(f, preload=True)
+
+            for index, epoch in enumerate(epochs):
+                metadata = epochs.metadata.iloc[index]
+
+                if metadata['dataset'] == 'SAD':
+                    label = self._get_sad_label(metadata)
+                elif metadata['dataset'] == 'dasps':
+                    label = self._get_dasps_label(metadata)
+                else:
+                    raise ValueError(f'Invalid dataset: {metadata["dataset"]}')
+
+                data.append(epoch)
+                labels.append(label.value)
+                groups.append(metadata['subject'])
+
+        data = np.array(data)
+        labels = np.array(labels)
+        groups = np.array(groups)
+
+        if oversample:
+            data, labels, groups = _oversample(data, labels, groups)
+
+
+def _oversample(features, labels, groups):
+    label_counts = np.bincount(labels)
+    max_label_count = np.max(label_counts)
+
+    for label in np.unique(labels):
+        n_to_oversample = max_label_count - label_counts[label]
+
+        if n_to_oversample == 0:
+            continue
+
+        # Get indices of samples with given label
+        label_indices = np.where(labels == label)[0]
+
+        # Randomly select samples to oversample
+        new_samples = np.random.choice(label_indices, n_to_oversample)
+
+        features = np.vstack([features, features[new_samples]])
+        labels = np.hstack([labels, labels[new_samples]])
+        groups = np.hstack([groups, groups[new_samples]])
+
+    return features, labels, groups
+
+
+class DeepCnnDataset(Dataset):
+    trials = []
+    labels = []
+
+    def __init__(self, seglen: int, max_len: int) -> None:
+        clean_segdir_path = os.path.join(
+            script_path, f'../data/segmented/{seglen}s/clean')
+        files = glob.glob(f'{clean_segdir_path}/*-epo.fif')
+
+        trials = []
+
+        for f in files:
+            epochs = mne.read_epochs(f, preload=True)
+
+            print(epochs.metadata)
+
+        self.max_len = max_len
+
+    def __len__(self):
+        return len(self.trials)
+
+    def __getitem__(self, index):
+        trial = self.trials[index]
+
+        return tensor(trial.epoch.get_data()[:, self.channels, :self.max_len]), trial.trial_label.value
+
 
 if __name__ == "__main__":
     # Normal dataset builder
+    # labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
+    # builder = DatasetBuilder(labeling_scheme)
+
+    # df = builder.build_dataset_df(10)
+
+    # # Control dataset builder
+    # # dasps, sad = builder.build_control_dataset_arrs(15)
+
+    # print(dasps.shape)
+    # print(sad.shape)
+
+    # Deep dataset builder
     labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
     builder = DatasetBuilder(labeling_scheme)
 
-    df = builder.build_dataset_df(10)
-
-    # Control dataset builder
-    # dasps, sad = builder.build_control_dataset_arrs(15)
-
-    print(dasps.shape)
-    print(sad.shape)
+    dataset = builder.build_deep_dataset(10)
 
 # %%

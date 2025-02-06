@@ -96,7 +96,7 @@ GRID = {
 }
 
 # Classifier
-classif = "svm-rbf"
+classif = "lda"
 
 # Segment length
 seglen = 10
@@ -114,7 +114,7 @@ oversample = True
 dasps_labeling_scheme = "ham"
 
 # Cross validation: skf, logo
-cv = 'skf'
+cv = 'logo'
 
 verbosity = 0
 
