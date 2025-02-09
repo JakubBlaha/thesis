@@ -216,11 +216,14 @@ def train_eval_pytorch_model(
 
     plt.show()
 
-    print(f"Avg test acc last {last_epochs_avg} epochs: ", np.mean(
-        test_acc[-last_epochs_avg:]))
-
     # Max accuracy
-    print(f"Max test acc: ", max(test_acc))
+    if len(test_acc) > 5:
+        max_test_acc = max(test_acc[5:])
+        max_index = 5 + np.argmax(test_acc[5:])
+        print(f"Max test acc after 5 epochs: ", max_test_acc)
+        print(f"Max accuracy epoch: ", max_index)
+    else:
+        print("Not enough epochs to compute max test accuracy after 5 epochs.")
 
 
 if __name__ == "__main__":
