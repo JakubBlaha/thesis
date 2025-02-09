@@ -196,6 +196,9 @@ def train_eval_pytorch_model(
             val_losses.append(np.mean(losses_))
             test_acc.append(num_correct/num_samples)
 
+    train_acc = [i.cpu() for i in train_acc]
+    test_acc = [i.cpu() for i in test_acc]
+
     plt.figure(figsize=(20, 5))
     plt.ylim(0, 1)
     plt.plot(train_losses)
@@ -237,6 +240,6 @@ if __name__ == "__main__":
     model.to(device)
 
     train_eval_pytorch_model(
-        model, train, test, num_epochs=50, learning_rate=0.00001)
+        model, train, test, num_epochs=10, learning_rate=0.00001)
 
     # torch.save(model.state_dict(), 'trained_model.pth')
