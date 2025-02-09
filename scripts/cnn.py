@@ -126,6 +126,7 @@ class ConvNet(nn.Module):
 def compile_model(model, learning_rate=0.001):
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    # optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
     return criterion, optimizer
 
 
@@ -151,7 +152,7 @@ def train_eval_pytorch_model(
 
     if enable_profiling:
         profiler_context = profile(
-            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+            activities=[ProfilerActivity.CPU],
             record_shapes=True)
     else:
         profiler_context = contextlib.nullcontext()
@@ -264,7 +265,7 @@ if __name__ == "__main__":
     model.to(device)
 
     train_eval_pytorch_model(
-        model, train, test, num_epochs=5, learning_rate=0.00001,
-        enable_profiling=True)
+        model, train, test, num_epochs=15, learning_rate=0.00001,
+        enable_profiling=False)
 
     # torch.save(model.state_dict(), 'trained_model.pth')
