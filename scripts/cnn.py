@@ -123,14 +123,19 @@ class ConvNetCustom(nn.Module):
         return x
 
 
+def compile_model(model, learning_rate=0.001):
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    return criterion, optimizer
+
+
 def train_eval_pytorch_model(
         model, train_dataset, test_dataset, *, num_epochs=100,
         learning_rate=0.001, batch_size=32, last_epochs_avg=10):
     print("Train samples: ", len(train_dataset))
     print("Test samples: ", len(test_dataset))
 
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    criterion, optimizer = compile_model(model, learning_rate)
 
     train_losses = []
     val_losses = []
