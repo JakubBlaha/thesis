@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 from torch import tensor
 from tqdm.notebook import tqdm
 from torch.utils.data import DataLoader
@@ -196,23 +197,30 @@ def train_eval_pytorch_model(
             val_losses.append(np.mean(losses_))
             test_acc.append(num_correct/num_samples)
 
-    train_acc = [i.cpu() for i in train_acc]
-    test_acc = [i.cpu() for i in test_acc]
+    train_acc = [float(i.cpu().detach().numpy()) for i in train_acc]
+    test_acc = [float(i.cpu().detach().numpy()) for i in test_acc]
 
-    plt.figure(figsize=(20, 5))
-    plt.ylim(0, 1)
-    plt.plot(train_losses)
-    plt.plot(val_losses)
+    # Plotting with seaborn
+    fig, axs = plt.subplots(1, 2, figsize=(20, 5))
+    configs = [
+        (axs[0], {"Train Loss": train_losses, "Validation Loss": val_losses}, "Loss"),
+        (axs[1], {"Train Accuracy": train_acc, "Test Accuracy": test_acc}, "Accuracy")
+    ]
+    for ax, data_dict, title in configs:
+        for label, values in data_dict.items():
+            sns.lineplot(x=range(len(values)), y=values, ax=ax, label=label)
+        ax.set(ylim=(0, 1))
+        ax.set_title(title)
+        ax.set_ylabel(title)
+        ax.set_xlabel("Epochs")
+
     plt.show()
 
-    plt.figure(figsize=(20, 5))
-    plt.ylim(0, 1)
-    plt.plot(train_acc)
-    plt.plot(test_acc)
-    plt.show()
-
-    print(f"Avg test acc last {last_epochs_avg}  epochs: ", np.mean(
+    print(f"Avg test acc last {last_epochs_avg} epochs: ", np.mean(
         test_acc[-last_epochs_avg:]))
+
+    # Max accuracy
+    print(f"Max test acc: ", max(test_acc))
 
 
 if __name__ == "__main__":
