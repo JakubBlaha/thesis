@@ -1,5 +1,5 @@
 # %%
-from utils import DeepCnnDataset, DatasetBuilder, LabelingScheme, DaspsLabeling
+from utils import DatasetBuilder, LabelingScheme, DaspsLabeling
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -9,6 +9,9 @@ from torch import tensor
 from tqdm.notebook import tqdm
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
+
+# Inspired by the following
+# https://github.com/CNN-for-EEG-classification/CNN-EEG/blob/main/convNet.py
 
 
 class ConvNet(nn.Module):
@@ -38,8 +41,6 @@ class ConvNet(nn.Module):
 
             # Pool 2
             nn.MaxPool2d(kernel_size=(1, 2), stride=(1, 2)),
-
-            # Layer 4
             nn.Conv2d(in_channels=80, out_channels=160,
                       kernel_size=(1, 11), stride=(1, 1)),
             nn.BatchNorm2d(160, affine=False),
@@ -62,14 +63,17 @@ class ConvNet(nn.Module):
             nn.Flatten(start_dim=1),
 
             # Linear Layer
-            nn.Linear(4 * 160, num_classes),
+            nn.Linear(5280, num_classes),
             nn.LogSoftmax(dim=1)
         )
 
     def forward(self, x):
+        # print(x.shape)
+
         for i, layer in enumerate(self.model):
             x = layer(x)
-            # print(f"Layer {i}: {layer.__class__.__name__}, Output Shape: {x.shape}")
+            # print(
+            #     f"Layer {i}: {layer.__class__.__name__}, Output Shape: {x.shape}")
         return x
 
 
@@ -204,9 +208,29 @@ def train_eval_pytorch_model(
 
 
 if __name__ == "__main__":
+    # Setup HW acceleration
+    # if torch.backends.mps.is_available():
+    #     device = torch.device("mps")
+    # else:
+    #     device = torch.device("cpu")
+
+    # print(f"Using device: {device}")
+
+    # Build dataset
     labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
     builder = DatasetBuilder(labeling_scheme)
 
-    dataset = builder.build_deep_dataset(10)
-    # dataset = DeepCnnDataset(10, 1024)
+    train, test = builder.build_deep_datasets_train_test(10)
+
+    data, label = train[0]
+
+    channels, n_electrodes, seq_len = data.shape
+
+    print("Seq len: ", seq_len)
+
+    model = ConvNet(seq_len=seq_len, num_classes=3, dropout=0)
+    # model.to(device)
+
+    train_eval_pytorch_model(model, train, test, num_epochs=50)
+
     # model = ConvNet()
