@@ -15,7 +15,7 @@ from torch.utils.data import Dataset
 
 
 class ConvNet(nn.Module):
-    def __init__(self, seq_len, num_classes=0, dropout=0.0):
+    def __init__(self, seq_len, num_classes, dropout=0.0):
         super().__init__()
 
         self.model = nn.Sequential(
@@ -138,8 +138,9 @@ def train_eval_pytorch_model(
     test_acc = []
 
     train_loader = DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
+        train_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
+    test_loader = DataLoader(
+        test_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
 
     for epoch in tqdm(range(num_epochs)):
         # Train
@@ -151,7 +152,8 @@ def train_eval_pytorch_model(
         losses_ = []
 
         for data, targets in train_loader:
-            t = tensor(data, dtype=torch.float32)
+            t = tensor(data, dtype=torch.float32).to(device)
+            targets = targets.to(device)
 
             scores = model.forward(t)
             loss = criterion(scores, targets)
@@ -179,7 +181,10 @@ def train_eval_pytorch_model(
             losses_ = []
 
             for data, targets in test_loader:
-                scores = model.forward(tensor(data, dtype=torch.float32))
+                t = tensor(data, dtype=torch.float32).to(device)
+                targets = targets.to(device)
+
+                scores = model.forward(t)
                 loss = criterion(scores, targets)
 
                 losses_.append(loss.item())
@@ -209,12 +214,12 @@ def train_eval_pytorch_model(
 
 if __name__ == "__main__":
     # Setup HW acceleration
-    # if torch.backends.mps.is_available():
-    #     device = torch.device("mps")
-    # else:
-    #     device = torch.device("cpu")
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
 
-    # print(f"Using device: {device}")
+    print(f"Using device: {device}")
 
     # Build dataset
     labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
@@ -229,8 +234,9 @@ if __name__ == "__main__":
     print("Seq len: ", seq_len)
 
     model = ConvNet(seq_len=seq_len, num_classes=3, dropout=0)
-    # model.to(device)
+    model.to(device)
 
-    train_eval_pytorch_model(model, train, test, num_epochs=50)
+    train_eval_pytorch_model(
+        model, train, test, num_epochs=50, learning_rate=0.00001)
 
-    # model = ConvNet()
+    torch.save(model.state_dict(), 'trained_model.pth')
