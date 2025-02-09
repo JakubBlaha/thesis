@@ -6,11 +6,10 @@ import torch.optim as optim
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from torch import tensor
 from tqdm.notebook import tqdm
 from torch.utils.data import DataLoader
-from torch.utils.data import Dataset
 from torch.profiler import profile, record_function, ProfilerActivity
+import contextlib
 
 # Inspired by the following
 # https://github.com/CNN-for-EEG-classification/CNN-EEG/blob/main/convNet.py
@@ -79,49 +78,49 @@ class ConvNet(nn.Module):
         return x
 
 
-class ConvNetCustom(nn.Module):
-    def __init__(self, seq_len, num_classes=0, dropout=0.0):
-        super().__init__()
+# class ConvNetCustom(nn.Module):
+#     def __init__(self, seq_len, num_classes=0, dropout=0.0):
+#         super().__init__()
 
-        self.model = nn.Sequential(
-            nn.ZeroPad2d((15, 15, 0, 0)),
-            nn.Conv2d(in_channels=1, out_channels=20, kernel_size=(1, 31), stride=(1, 1), padding=0),
-            nn.LeakyReLU(),
-            nn.Dropout(p=dropout),
+#         self.model = nn.Sequential(
+#             nn.ZeroPad2d((15, 15, 0, 0)),
+#             nn.Conv2d(in_channels=1, out_channels=20, kernel_size=(1, 31), stride=(1, 1), padding=0),
+#             nn.LeakyReLU(),
+#             nn.Dropout(p=dropout),
 
-            nn.Conv2d(in_channels=20, out_channels=40, kernel_size=(2, 1), stride=(2, 1), padding=0),
-            nn.BatchNorm2d(40, affine=False),
-            nn.LeakyReLU(),
-            nn.MaxPool2d(kernel_size=(1, 3), stride=(1, 2)),
+#             nn.Conv2d(in_channels=20, out_channels=40, kernel_size=(2, 1), stride=(2, 1), padding=0),
+#             nn.BatchNorm2d(40, affine=False),
+#             nn.LeakyReLU(),
+#             nn.MaxPool2d(kernel_size=(1, 3), stride=(1, 2)),
 
-            nn.Conv2d(in_channels=40, out_channels=80, kernel_size=(1, 21), stride=(1, 1)),
-            nn.LeakyReLU(),
-            nn.Dropout(p=dropout),
-            nn.MaxPool2d(kernel_size=(1, 2), stride=(1, 2)),
+#             nn.Conv2d(in_channels=40, out_channels=80, kernel_size=(1, 21), stride=(1, 1)),
+#             nn.LeakyReLU(),
+#             nn.Dropout(p=dropout),
+#             nn.MaxPool2d(kernel_size=(1, 2), stride=(1, 2)),
 
-            nn.Conv2d(in_channels=80, out_channels=160, kernel_size=(1, 11), stride=(1, 1)),
-            nn.BatchNorm2d(160, affine=False),
-            nn.LeakyReLU(),
-            nn.Dropout(p=dropout),
-            nn.MaxPool2d(kernel_size=(1, 3), stride=(1, 3)),
+#             nn.Conv2d(in_channels=80, out_channels=160, kernel_size=(1, 11), stride=(1, 1)),
+#             nn.BatchNorm2d(160, affine=False),
+#             nn.LeakyReLU(),
+#             nn.Dropout(p=dropout),
+#             nn.MaxPool2d(kernel_size=(1, 3), stride=(1, 3)),
 
-            nn.Conv2d(in_channels=160, out_channels=160, kernel_size=(7, 1), stride=(7, 1)),
-            nn.BatchNorm2d(160, affine=False),
-            nn.LeakyReLU(),
-            nn.MaxPool2d(kernel_size=(1, 3), stride=(1, 3)),
+#             nn.Conv2d(in_channels=160, out_channels=160, kernel_size=(7, 1), stride=(7, 1)),
+#             nn.BatchNorm2d(160, affine=False),
+#             nn.LeakyReLU(),
+#             nn.MaxPool2d(kernel_size=(1, 3), stride=(1, 3)),
 
-            nn.Flatten(start_dim=1),
+#             nn.Flatten(start_dim=1),
 
-            nn.Linear(4 * 160, num_classes),
-            nn.LogSoftmax(dim=1)
-        )
+#             nn.Linear(4 * 160, num_classes),
+#             nn.LogSoftmax(dim=1)
+#         )
 
-    def forward(self, x):
-        for i, layer in enumerate(self.model):
-            x = layer(x)
-            print(f"Layer {i}: {
-                  layer.__class__.__name__}, Output Shape: {x.shape}")
-        return x
+#     def forward(self, x):
+#         for i, layer in enumerate(self.model):
+#             x = layer(x)
+#             print(f"Layer {i}: {
+#                   layer.__class__.__name__}, Output Shape: {x.shape}")
+#         return x
 
 
 def compile_model(model, learning_rate=0.001):
@@ -132,7 +131,8 @@ def compile_model(model, learning_rate=0.001):
 
 def train_eval_pytorch_model(
         model, train_dataset, test_dataset, *, num_epochs=100,
-        learning_rate=0.001, batch_size=32, last_epochs_avg=10):
+        learning_rate=0.001, batch_size=32, last_epochs_avg=10,
+        enable_profiling=False):
     print("Train samples: ", len(train_dataset))
     print("Test samples: ", len(test_dataset))
 
@@ -149,7 +149,14 @@ def train_eval_pytorch_model(
     test_loader = DataLoader(
         test_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
 
-    with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
+    if enable_profiling:
+        profiler_context = profile(
+            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+            record_shapes=True)
+    else:
+        profiler_context = contextlib.nullcontext()
+
+    with profiler_context as prof:
         for epoch in tqdm(range(num_epochs)):
             # Train
             model.train()
@@ -160,14 +167,11 @@ def train_eval_pytorch_model(
             losses_ = []
 
             for data, targets in train_loader:
-                t = data.to(device)
-                targets = targets.to(device)
-
                 with record_function("model_inference"):
-                    scores = model.forward(t)
+                    scores = model.forward(data)
                 loss = criterion(scores, targets)
 
-                losses_.append(loss.item())
+                losses_.append(loss.detach())
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -177,7 +181,7 @@ def train_eval_pytorch_model(
                 num_correct += (predictions == targets).sum()
                 num_samples += predictions.size(0)
 
-            train_losses.append(np.mean(losses_))
+            train_losses.append(torch.stack(losses_).mean().item())
             train_acc.append(num_correct/num_samples)
 
             # Evaluate
@@ -190,23 +194,21 @@ def train_eval_pytorch_model(
                 losses_ = []
 
                 for data, targets in test_loader:
-                    t = data.to(device)
-                    targets = targets.to(device)
-
                     with record_function("model_inference"):
-                        scores = model.forward(t)
+                        scores = model.forward(data)
                     loss = criterion(scores, targets)
 
-                    losses_.append(loss.item())
+                    losses_.append(loss.detach())
 
                     _, predictions = scores.max(1)
                     num_correct += (predictions == targets).sum()
                     num_samples += predictions.size(0)
 
-                val_losses.append(np.mean(losses_))
+                val_losses.append(torch.stack(losses_).mean().item())
                 test_acc.append(num_correct/num_samples)
 
-    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
+    if enable_profiling:
+        print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
 
     train_acc = [float(i.cpu().detach().numpy()) for i in train_acc]
     test_acc = [float(i.cpu().detach().numpy()) for i in test_acc]
@@ -250,7 +252,7 @@ if __name__ == "__main__":
     labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
     builder = DatasetBuilder(labeling_scheme)
 
-    train, test = builder.build_deep_datasets_train_test(10)
+    train, test = builder.build_deep_datasets_train_test(10, device=device)
 
     data, label = train[0]
 
@@ -262,6 +264,7 @@ if __name__ == "__main__":
     model.to(device)
 
     train_eval_pytorch_model(
-        model, train, test, num_epochs=10, learning_rate=0.00001)
+        model, train, test, num_epochs=5, learning_rate=0.00001,
+        enable_profiling=True)
 
     # torch.save(model.state_dict(), 'trained_model.pth')

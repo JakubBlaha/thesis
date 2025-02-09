@@ -284,7 +284,8 @@ class DatasetBuilder(BaseDatasetBuilder):
 
         raise ValueError(f'Invalid SAD severity: {severity}')
 
-    def build_deep_datasets_train_test(self, seglen: int, oversample=True):
+    def build_deep_datasets_train_test(
+            self, seglen: int, oversample=True, device=None):
         clean_segdir_path = os.path.join(
             script_path, f'../data/segmented/{seglen}s/clean')
         files = glob.glob(f'{clean_segdir_path}/*-epo.fif')
@@ -327,30 +328,30 @@ class DatasetBuilder(BaseDatasetBuilder):
         test_data = data[test_mask]
         test_labels = labels[test_mask]
 
-        train_torch_dataset = TorchDeepDataset(train_data, train_labels)
-        test_torch_dataset = TorchDeepDataset(test_data, test_labels)
+        train_torch_dataset = TorchDeepDataset(
+            train_data, train_labels, device)
+        test_torch_dataset = TorchDeepDataset(test_data, test_labels, device)
 
         return train_torch_dataset, test_torch_dataset
 
 
 class TorchDeepDataset(Dataset):
-    def __init__(self, data, labels) -> None:
+    def __init__(self, data, labels, device=None) -> None:
         self.max_len = 1024
 
-        self.epochs = data
-        self.labels = labels
+        # Add channel dimension
+        data = np.array([i[np.newaxis, :, :] for i in data])
+
+        print("Shape", data.shape)
+
+        self.epochs = torch.from_numpy(data).float().to(device)
+        self.labels = torch.from_numpy(labels).long().to(device)
 
     def __len__(self):
         return len(self.labels)
 
     def __getitem__(self, index):
-        epoch = self.epochs[index]
-        label = self.labels[index]
-
-        # Add channel dimension
-        epoch = epoch[np.newaxis, :, :]
-
-        return torch.from_numpy(epoch).float(), label
+        return self.epochs[index], self.labels[index]
 
 
 if __name__ == "__main__":
