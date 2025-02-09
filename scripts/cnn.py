@@ -10,6 +10,7 @@ from torch import tensor
 from tqdm.notebook import tqdm
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
+from torch.profiler import profile, record_function, ProfilerActivity
 
 # Inspired by the following
 # https://github.com/CNN-for-EEG-classification/CNN-EEG/blob/main/convNet.py
@@ -148,59 +149,64 @@ def train_eval_pytorch_model(
     test_loader = DataLoader(
         test_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
 
-    for epoch in tqdm(range(num_epochs)):
-        # Train
-        model.train()
+    with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
+        for epoch in tqdm(range(num_epochs)):
+            # Train
+            model.train()
 
-        num_correct = 0
-        num_samples = 0
-
-        losses_ = []
-
-        for data, targets in train_loader:
-            t = data.to(device)
-            targets = targets.to(device)
-
-            scores = model.forward(t)
-            loss = criterion(scores, targets)
-
-            losses_.append(loss.item())
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            _, predictions = scores.max(1)
-            num_correct += (predictions == targets).sum()
-            num_samples += predictions.size(0)
-
-        train_losses.append(np.mean(losses_))
-        train_acc.append(num_correct/num_samples)
-
-        # Evaluate
-        model.eval()
-
-        with torch.no_grad():
             num_correct = 0
             num_samples = 0
 
             losses_ = []
 
-            for data, targets in test_loader:
+            for data, targets in train_loader:
                 t = data.to(device)
                 targets = targets.to(device)
 
-                scores = model.forward(t)
+                with record_function("model_inference"):
+                    scores = model.forward(t)
                 loss = criterion(scores, targets)
 
                 losses_.append(loss.item())
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
 
                 _, predictions = scores.max(1)
                 num_correct += (predictions == targets).sum()
                 num_samples += predictions.size(0)
 
-            val_losses.append(np.mean(losses_))
-            test_acc.append(num_correct/num_samples)
+            train_losses.append(np.mean(losses_))
+            train_acc.append(num_correct/num_samples)
+
+            # Evaluate
+            model.eval()
+
+            with torch.no_grad():
+                num_correct = 0
+                num_samples = 0
+
+                losses_ = []
+
+                for data, targets in test_loader:
+                    t = data.to(device)
+                    targets = targets.to(device)
+
+                    with record_function("model_inference"):
+                        scores = model.forward(t)
+                    loss = criterion(scores, targets)
+
+                    losses_.append(loss.item())
+
+                    _, predictions = scores.max(1)
+                    num_correct += (predictions == targets).sum()
+                    num_samples += predictions.size(0)
+
+                val_losses.append(np.mean(losses_))
+                test_acc.append(num_correct/num_samples)
+
+    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
 
     train_acc = [float(i.cpu().detach().numpy()) for i in train_acc]
     test_acc = [float(i.cpu().detach().numpy()) for i in test_acc]
