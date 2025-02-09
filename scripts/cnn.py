@@ -152,7 +152,7 @@ def train_eval_pytorch_model(
         losses_ = []
 
         for data, targets in train_loader:
-            t = tensor(data, dtype=torch.float32).to(device)
+            t = data.to(device)
             targets = targets.to(device)
 
             scores = model.forward(t)
@@ -181,7 +181,7 @@ def train_eval_pytorch_model(
             losses_ = []
 
             for data, targets in test_loader:
-                t = tensor(data, dtype=torch.float32).to(device)
+                t = data.to(device)
                 targets = targets.to(device)
 
                 scores = model.forward(t)
@@ -239,4 +239,4 @@ if __name__ == "__main__":
     train_eval_pytorch_model(
         model, train, test, num_epochs=50, learning_rate=0.00001)
 
-    torch.save(model.state_dict(), 'trained_model.pth')
+    # torch.save(model.state_dict(), 'trained_model.pth')
