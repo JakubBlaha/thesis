@@ -7,6 +7,7 @@ import os
 import glob
 from enum import Enum
 from scipy.stats import f_oneway
+import torch
 
 from constants import features_dir
 
@@ -57,6 +58,29 @@ def get_extracted_seglens():
 
 def get_feats_csv_path(seglen: int):
     return os.path.join(features_dir, f'features_{seglen}s.csv')
+
+
+def custom_random_oversample(features, labels, groups):
+    label_counts = np.bincount(labels)
+    max_label_count = np.max(label_counts)
+
+    for label in np.unique(labels):
+        n_to_oversample = max_label_count - label_counts[label]
+
+        if n_to_oversample == 0:
+            continue
+
+        # Get indices of samples with given label
+        label_indices = np.where(labels == label)[0]
+
+        # Randomly select samples to oversample
+        new_samples = np.random.choice(label_indices, n_to_oversample)
+
+        features = np.vstack([features, features[new_samples]])
+        labels = np.hstack([labels, labels[new_samples]])
+        groups = np.hstack([groups, groups[new_samples]])
+
+    return features, labels, groups
 
 
 class BaseDatasetBuilder:
@@ -260,7 +284,7 @@ class DatasetBuilder(BaseDatasetBuilder):
 
         raise ValueError(f'Invalid SAD severity: {severity}')
 
-    def build_deep_dataset(self, seglen: int, oversample=True):
+    def build_deep_datasets_train_test(self, seglen: int, oversample=True):
         clean_segdir_path = os.path.join(
             script_path, f'../data/segmented/{seglen}s/clean')
         files = glob.glob(f'{clean_segdir_path}/*-epo.fif')
@@ -291,57 +315,42 @@ class DatasetBuilder(BaseDatasetBuilder):
         groups = np.array(groups)
 
         if oversample:
-            data, labels, groups = _oversample(data, labels, groups)
+            data, labels, groups = custom_random_oversample(
+                data, labels, groups)
+
+        test_subj = groups[0]
+        test_mask = groups == test_subj
+
+        train_data = data[~test_mask]
+        train_labels = labels[~test_mask]
+
+        test_data = data[test_mask]
+        test_labels = labels[test_mask]
+
+        train_torch_dataset = TorchDeepDataset(train_data, train_labels)
+        test_torch_dataset = TorchDeepDataset(test_data, test_labels)
+
+        return train_torch_dataset, test_torch_dataset
 
 
-def _oversample(features, labels, groups):
-    label_counts = np.bincount(labels)
-    max_label_count = np.max(label_counts)
+class TorchDeepDataset(Dataset):
+    def __init__(self, data, labels) -> None:
+        self.max_len = 1024
 
-    for label in np.unique(labels):
-        n_to_oversample = max_label_count - label_counts[label]
-
-        if n_to_oversample == 0:
-            continue
-
-        # Get indices of samples with given label
-        label_indices = np.where(labels == label)[0]
-
-        # Randomly select samples to oversample
-        new_samples = np.random.choice(label_indices, n_to_oversample)
-
-        features = np.vstack([features, features[new_samples]])
-        labels = np.hstack([labels, labels[new_samples]])
-        groups = np.hstack([groups, groups[new_samples]])
-
-    return features, labels, groups
-
-
-class DeepCnnDataset(Dataset):
-    trials = []
-    labels = []
-
-    def __init__(self, seglen: int, max_len: int) -> None:
-        clean_segdir_path = os.path.join(
-            script_path, f'../data/segmented/{seglen}s/clean')
-        files = glob.glob(f'{clean_segdir_path}/*-epo.fif')
-
-        trials = []
-
-        for f in files:
-            epochs = mne.read_epochs(f, preload=True)
-
-            print(epochs.metadata)
-
-        self.max_len = max_len
+        self.epochs = data
+        self.labels = labels
 
     def __len__(self):
-        return len(self.trials)
+        return len(self.labels)
 
     def __getitem__(self, index):
-        trial = self.trials[index]
+        epoch = self.epochs[index]
+        label = self.labels[index]
 
-        return tensor(trial.epoch.get_data()[:, self.channels, :self.max_len]), trial.trial_label.value
+        # Add channel dimension
+        epoch = epoch[np.newaxis, :, :]
+
+        return torch.from_numpy(epoch).float(), label
 
 
 if __name__ == "__main__":
@@ -361,6 +370,6 @@ if __name__ == "__main__":
     labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
     builder = DatasetBuilder(labeling_scheme)
 
-    dataset = builder.build_deep_dataset(10)
+    train, test = builder.build_deep_datasets_train_test(10)
 
 # %%

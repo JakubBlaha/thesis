@@ -12,7 +12,7 @@ from sklearn import svm
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.pipeline import Pipeline
 
-from utils import DatasetBuilder, LabelingScheme, DaspsLabeling
+from utils import DatasetBuilder, LabelingScheme, DaspsLabeling, custom_random_oversample
 from tabulate import tabulate
 
 GRID = {
@@ -119,29 +119,6 @@ cv = 'logo'
 verbosity = 0
 
 
-def _oversample(features, labels, groups):
-    label_counts = np.bincount(labels)
-    max_label_count = np.max(label_counts)
-
-    for label in np.unique(labels):
-        n_to_oversample = max_label_count - label_counts[label]
-
-        if n_to_oversample == 0:
-            continue
-
-        # Get indices of samples with given label
-        label_indices = np.where(labels == label)[0]
-
-        # Randomly select samples to oversample
-        new_samples = np.random.choice(label_indices, n_to_oversample)
-
-        features = np.vstack([features, features[new_samples]])
-        labels = np.hstack([labels, labels[new_samples]])
-        groups = np.hstack([groups, groups[new_samples]])
-
-    return features, labels, groups
-
-
 def train_models():
     if dasps_labeling_scheme == "ham":
         _labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
@@ -174,7 +151,8 @@ def train_models():
     features = df.to_numpy()
 
     if oversample:
-        features, labels, groups = _oversample(features, labels, groups)
+        features, labels, groups = custom_random_oversample(
+            features, labels, groups)
 
     n_feats = features.shape[1]
 
