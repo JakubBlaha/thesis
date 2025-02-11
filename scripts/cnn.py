@@ -30,7 +30,7 @@ class ConvNet(nn.Module):
             # Layer 2
             nn.Conv2d(in_channels=20, out_channels=40,
                       kernel_size=(2, 1), stride=(2, 1), padding=0),
-            nn.BatchNorm2d(40, affine=False),
+            nn.BatchNorm2d(40, affine=True),
             nn.LeakyReLU(),
             nn.MaxPool2d(kernel_size=(1, 3), stride=(1, 2)),
 
@@ -44,7 +44,7 @@ class ConvNet(nn.Module):
             nn.MaxPool2d(kernel_size=(1, 2), stride=(1, 2)),
             nn.Conv2d(in_channels=80, out_channels=160,
                       kernel_size=(1, 11), stride=(1, 1)),
-            nn.BatchNorm2d(160, affine=False),
+            nn.BatchNorm2d(160, affine=True),
             nn.LeakyReLU(),
             nn.Dropout(p=dropout),
 
@@ -54,7 +54,7 @@ class ConvNet(nn.Module):
             # Layer 5
             nn.Conv2d(in_channels=160, out_channels=160,
                       kernel_size=(7, 1), stride=(7, 1)),
-            nn.BatchNorm2d(160, affine=False),
+            nn.BatchNorm2d(160, affine=True),
             nn.LeakyReLU(),
 
             # Pool 4
@@ -76,6 +76,51 @@ class ConvNet(nn.Module):
             # print(
             #     f"Layer {i}: {layer.__class__.__name__}, Output Shape: {x.shape}")
         return x
+    
+
+import torch.nn as nn
+
+class EEGNet(nn.Module):
+    def __init__(self, num_classes, seq_len=None, dropout=0.5, num_channels=14):  # num_channels added
+        super(EEGNet, self).__init__()
+
+        self.model = nn.Sequential(
+            # Layer 1
+            nn.Conv1d(in_channels=num_channels, out_channels=20, kernel_size=5, padding=2),
+            nn.BatchNorm1d(20),
+            nn.LeakyReLU(),
+            nn.Dropout(p=dropout),
+
+            # Layer 2
+            nn.Conv1d(in_channels=20, out_channels=40, kernel_size=5, padding=2),
+            nn.BatchNorm1d(40),
+            nn.LeakyReLU(),
+            nn.AvgPool1d(kernel_size=2),
+
+            # Layer 3
+            nn.Conv1d(in_channels=40, out_channels=80, kernel_size=3, padding=1),
+            nn.LeakyReLU(),
+            nn.Dropout(p=dropout),
+
+            # Layer 4
+            nn.Conv1d(in_channels=80, out_channels=160, kernel_size=3, padding=1),
+            nn.BatchNorm1d(160),
+            nn.LeakyReLU(),
+            nn.AvgPool1d(kernel_size=2),
+
+            # Global Average Pooling
+            nn.AdaptiveAvgPool1d(1),
+
+            # Flatten
+            nn.Flatten(),
+
+            # Linear Layer
+            nn.Linear(160, num_classes),
+            nn.LogSoftmax(dim=1)
+        )
+
+    def forward(self, x):
+        return self.model(x)
 
 
 # class ConvNetCustom(nn.Module):
@@ -146,13 +191,13 @@ def train_eval_pytorch_model(
     test_acc = []
 
     train_loader = DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
+        train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(
-        test_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
+        test_dataset, batch_size=batch_size, shuffle=False)
 
     if enable_profiling:
         profiler_context = profile(
-            activities=[ProfilerActivity.CPU],
+            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
             record_shapes=True)
     else:
         profiler_context = contextlib.nullcontext()
@@ -230,20 +275,69 @@ def train_eval_pytorch_model(
 
     plt.show()
 
-    # Max accuracy
-    if len(test_acc) > 5:
-        max_test_acc = max(test_acc[5:])
-        max_index = 5 + np.argmax(test_acc[5:])
-        print(f"Max test acc after 5 epochs: ", max_test_acc)
-        print(f"Max accuracy epoch: ", max_index)
-    else:
-        print("Not enough epochs to compute max test accuracy after 5 epochs.")
+    print(f"Max test acc: ", max(test_acc))
+    print(f"Max accuracy epoch: ", np.argmax(test_acc))
+
+
+seglen_to_params = {
+    1: { # 0.61
+        "num_epochs": 40,
+        "learning_rate": 0.00001,
+        "batch_size": 16,
+        "dropout": 0.35,
+    },
+    2: { # 0.56
+        "num_epochs": 60,
+        "learning_rate": 0.00001,
+        "batch_size": 32,
+        "dropout": 0.35,
+    },
+    3: { # 0.633
+        "num_epochs": 50,
+        "learning_rate": 0.00001,
+        "batch_size": 4,
+        "dropout": 0.4,
+    },
+    5: { # 0.553
+        "num_epochs": 50,
+        "learning_rate": 0.00001,
+        "batch_size": 4,
+        "dropout": 0.4,
+    },
+    10: { # 0.59
+        "num_epochs": 100,
+        "learning_rate": 0.00001,
+        "batch_size": 4,
+        "dropout": 0.4,
+    },
+    15: { # 0.597
+        "num_epochs": 100,
+        "learning_rate": 0.00001,
+        "batch_size": 4,
+        "dropout": 0.4,
+    },
+    30: { # 0.589
+        "num_epochs": 100,
+        "learning_rate": 0.00001,
+        "batch_size": 4,
+        "dropout": 0.4,
+    },
+}
+
+seglen = 3
+use_gpu = True
 
 
 if __name__ == "__main__":
+    # Seed
+    torch.manual_seed(0)
+    np.random.seed(0)
+
     # Setup HW acceleration
-    if torch.backends.mps.is_available():
+    if torch.backends.mps.is_available() and use_gpu:
         device = torch.device("mps")
+    elif torch.cuda.is_available() and use_gpu:
+        device = torch.device("cuda")
     else:
         device = torch.device("cpu")
 
@@ -253,21 +347,37 @@ if __name__ == "__main__":
     labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
     builder = DatasetBuilder(labeling_scheme)
 
-    test_subj_idx = 15
+    test_subj_ids = [
+        8, 9, 10,  # Low DASPS
+        1, 2, 3, 4, 5, 6, 7, # High DASPS
+        *range(101, 106), # Low SAD
+        *range(401, 408)  # High SAD
+    ]
+
+    # Remove half of test subjects randomly
+    # test_subj_ids = np.random.choice(test_subj_ids, len(test_subj_ids) // 2, replace=False)
+
     train, test = builder.build_deep_datasets_train_test(
-        10, test_subj_idx, device=device)
+        seglen=seglen, insert_ch_dim=False, test_subj_ids=test_subj_ids, device=device)
 
-    data, label = train[0]
+    data, _ = train[0]
+    seq_len = data.shape[-1]
+    print("Seq len: ", train[0][0].shape[-1])
 
-    channels, n_electrodes, seq_len = data.shape
+    params = seglen_to_params.get(seglen)
 
-    print("Seq len: ", seq_len)
+    if params is None:
+        raise ValueError(f"No parameters defined for seglen: {seglen}")
 
-    model = ConvNet(seq_len=seq_len, num_classes=3, dropout=0)
+    # Print labels
+    # print(list(train.labels.cpu().numpy()))
+
+
+    model = EEGNet(seq_len=seq_len, num_classes=3, dropout=params["dropout"])
     model.to(device)
 
     train_eval_pytorch_model(
-        model, train, test, num_epochs=15, learning_rate=0.00001,
-        enable_profiling=False)
+        model, train, test, num_epochs=params["num_epochs"], learning_rate=params["learning_rate"],
+        enable_profiling=False, batch_size=params["batch_size"])
 
     # torch.save(model.state_dict(), 'trained_model.pth')

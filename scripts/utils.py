@@ -7,6 +7,7 @@ import os
 import glob
 from enum import Enum
 from scipy.stats import f_oneway
+from scipy.stats import zscore
 import torch
 
 from constants import features_dir
@@ -81,6 +82,15 @@ def custom_random_oversample(features, labels, groups):
         groups = np.hstack([groups, groups[new_samples]])
 
     return features, labels, groups
+
+
+def normalize_eeg(data):
+    """Normalizes EEG data (samples, electrodes, time_points) channel-wise."""
+
+    # Use axis=2 to normalize across the time points for each channel
+    normalized_data = zscore(data, axis=2, ddof=0)  # ddof=0 for population std
+
+    return normalized_data
 
 
 class BaseDatasetBuilder:
@@ -292,7 +302,7 @@ class DatasetBuilder(BaseDatasetBuilder):
         raise ValueError(f'Invalid SAD severity: {severity}')
 
     def build_deep_datasets_train_test(
-            self, seglen: int, test_subj_index: int, oversample=True,
+            self, *, seglen: int, insert_ch_dim: bool, test_subj_ids: list[int], oversample=True,
             device=None):
         clean_segdir_path = os.path.join(
             script_path, f'../data/segmented/{seglen}s/clean')
@@ -324,17 +334,22 @@ class DatasetBuilder(BaseDatasetBuilder):
         labels = np.array(labels)
         groups = np.array(groups)
 
-        unique_groups = np.unique(groups)
-        print("Unique groups:", unique_groups)
+        data = normalize_eeg(data).astype(np.float32)
 
-        test_subj_id = unique_groups[test_subj_index]
-        print("Test subject ID:", test_subj_id)
+        # print(data[0].mean(axis=1))
+        # print(data[0].var(axis=1))
+
+        print(data.dtype)
+
+        unique_groups = np.unique(groups)
+        print("Available subject IDs:", unique_groups)
+        print("Test subject IDs:", test_subj_ids)
 
         if oversample:
             data, labels, groups = custom_random_oversample(
                 data, labels, groups)
 
-        test_mask = groups == test_subj_id
+        test_mask = np.isin(groups, test_subj_ids)
 
         train_data = data[~test_mask]
         train_labels = labels[~test_mask]
@@ -343,18 +358,22 @@ class DatasetBuilder(BaseDatasetBuilder):
         test_labels = labels[test_mask]
 
         train_torch_dataset = TorchDeepDataset(
-            train_data, train_labels, device)
-        test_torch_dataset = TorchDeepDataset(test_data, test_labels, device)
+            train_data, train_labels, insert_ch_dim=insert_ch_dim, device=device)
+        test_torch_dataset = TorchDeepDataset(
+            test_data, test_labels, insert_ch_dim=insert_ch_dim, device=device)
 
         return train_torch_dataset, test_torch_dataset
 
 
 class TorchDeepDataset(Dataset):
-    def __init__(self, data, labels, device=None) -> None:
+    def __init__(self, data, labels, insert_ch_dim: bool, device=None) -> None:
         self.max_len = 1024
 
         # Add channel dimension
-        data = np.array([i[np.newaxis, :, :] for i in data])
+        if insert_ch_dim:
+            data = np.array([i[np.newaxis, :, :] for i in data])
+        else:
+            data = np.array(data)
 
         print("Shape", data.shape)
 
@@ -385,6 +404,6 @@ if __name__ == "__main__":
     labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
     builder = DatasetBuilder(labeling_scheme)
 
-    train, test = builder.build_deep_datasets_train_test(10, 0)
+    train, test = builder.build_deep_datasets_train_test(seglen=10, insert_ch_dim=False, test_subj_ids=[1, 2, 3])
 
 # %%
