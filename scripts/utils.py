@@ -112,8 +112,14 @@ class DatasetBuilder(BaseDatasetBuilder):
 
     def build_dataset_df(self, seglen: int, mode="both",
                          domains:
-                         list[str] = ["time", "rel_pow", "conn", "ai"],
+                         list[str] | None = None,
                          p_val_thresh=0.05) -> pd.DataFrame:
+
+        if domains is None:
+            domains = ["time", "rel_pow", "conn", "ai"]
+
+        print("Building dataset for seglen:", seglen, "mode:", mode,
+              "domains:", domains, "p_val_thresh:", p_val_thresh)
 
         df = self._get_seglen_df(seglen)
         df = self._label_rows(df)
@@ -173,10 +179,11 @@ class DatasetBuilder(BaseDatasetBuilder):
 
     def _keep_feat_cols(
             self, df: pd.DataFrame, domains: list[str]) -> pd.DataFrame:
-        assert all([d in self._feat_domain_prefix
-                    for d in domains]), "Invalid domain"
-
         print("Keeping domains:", domains)
+
+        for d in domains:
+            if d not in self._feat_domain_prefix:
+                raise ValueError(f'Invalid domain: {d}')
 
         if len(domains) == 0:
             domains += ["time", "rel_pow", "conn", "ai"]
@@ -285,10 +292,12 @@ class DatasetBuilder(BaseDatasetBuilder):
         raise ValueError(f'Invalid SAD severity: {severity}')
 
     def build_deep_datasets_train_test(
-            self, seglen: int, oversample=True, device=None):
+            self, seglen: int, test_subj_index: int, oversample=True,
+            device=None):
         clean_segdir_path = os.path.join(
             script_path, f'../data/segmented/{seglen}s/clean')
         files = glob.glob(f'{clean_segdir_path}/*-epo.fif')
+        files = sorted(files)
 
         data = []
         labels = []
@@ -315,12 +324,17 @@ class DatasetBuilder(BaseDatasetBuilder):
         labels = np.array(labels)
         groups = np.array(groups)
 
+        unique_groups = np.unique(groups)
+        print("Unique groups:", unique_groups)
+
+        test_subj_id = unique_groups[test_subj_index]
+        print("Test subject ID:", test_subj_id)
+
         if oversample:
             data, labels, groups = custom_random_oversample(
                 data, labels, groups)
 
-        test_subj = groups[0]
-        test_mask = groups == test_subj
+        test_mask = groups == test_subj_id
 
         train_data = data[~test_mask]
         train_labels = labels[~test_mask]
@@ -371,6 +385,6 @@ if __name__ == "__main__":
     labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
     builder = DatasetBuilder(labeling_scheme)
 
-    train, test = builder.build_deep_datasets_train_test(10)
+    train, test = builder.build_deep_datasets_train_test(10, 0)
 
 # %%

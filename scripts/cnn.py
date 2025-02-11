@@ -253,7 +253,9 @@ if __name__ == "__main__":
     labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
     builder = DatasetBuilder(labeling_scheme)
 
-    train, test = builder.build_deep_datasets_train_test(10, device=device)
+    test_subj_idx = 15
+    train, test = builder.build_deep_datasets_train_test(
+        10, test_subj_idx, device=device)
 
     data, label = train[0]
 
