@@ -11,6 +11,9 @@ from torch.utils.data import DataLoader
 from torch.profiler import profile, record_function, ProfilerActivity
 import contextlib
 from tabulate import tabulate
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 # Inspired by the following
 # https://github.com/CNN-for-EEG-classification/CNN-EEG/blob/main/convNet.py
@@ -178,11 +181,9 @@ def compile_model(model, learning_rate=0.001):
 
 def evaluate_model(model, test_loader, criterion):
     model.eval()
-    num_correct = 0
-    num_samples = 0
+    all_predictions = []
+    all_targets = []
     losses_ = []
-    class_correct = {}
-    class_total = {}
 
     with torch.no_grad():
         for data, targets in test_loader:
@@ -190,17 +191,13 @@ def evaluate_model(model, test_loader, criterion):
             loss = criterion(scores, targets)
             losses_.append(loss.detach())
             _, predictions = scores.max(1)
-            num_correct += (predictions == targets).sum()
-            num_samples += predictions.size(0)
-
-            for label in torch.unique(targets):
-                class_correct[label.item()] = class_correct.get(label.item(), 0) + (predictions[targets == label] == label).sum().item()
-                class_total[label.item()] = class_total.get(label.item(), 0) + (targets == label).sum().item()
+            
+            all_predictions.extend(predictions.cpu().numpy())
+            all_targets.extend(targets.cpu().numpy())
 
     avg_loss = torch.stack(losses_).mean().item()
-    accuracy = num_correct / num_samples
-    class_accuracy = {label: class_correct[label] / class_total[label] for label in class_correct}
-    return avg_loss, accuracy, class_accuracy
+    
+    return avg_loss, all_predictions, all_targets
 
 
 def train_model(
@@ -259,15 +256,15 @@ def train_model(
             train_acc.append(num_correct/num_samples)
 
             # Evaluate
-            val_loss, val_accuracy, _ = evaluate_model(model, test_loader, criterion)
+            val_loss, all_predictions, all_targets = evaluate_model(model, test_loader, criterion)
             val_losses.append(val_loss)
-            test_acc.append(val_accuracy)
+            test_acc.append(np.mean(np.array(all_predictions) == np.array(all_targets)))
 
     if enable_profiling:
         print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
 
-    train_acc = [float(i.cpu().detach().numpy()) for i in train_acc]
-    test_acc = [float(i.cpu().detach().numpy()) for i in test_acc]
+    train_acc = [float(i) for i in train_acc]
+    test_acc = [float(i) for i in test_acc]
 
     # Plotting with seaborn
     fig, axs = plt.subplots(1, 2, figsize=(20, 5))
@@ -303,7 +300,7 @@ seglen_to_params = {
         "dropout": 0.35,
     },
     3: { # 0.633
-        "num_epochs": 50,
+        "num_epochs": 40,
         "learning_rate": 0.00001,
         "batch_size": 4,
         "dropout": 0.4,
@@ -391,9 +388,18 @@ if __name__ == "__main__":
 
     # Evaluate the model on the test set
     test_loader = DataLoader(test, batch_size=params["batch_size"], shuffle=False)
-    test_loss, test_accuracy, class_accuracy = evaluate_model(model, test_loader, nn.CrossEntropyLoss())
+    test_loss, all_predictions, all_targets = evaluate_model(model, test_loader, nn.CrossEntropyLoss())
+    test_accuracy = np.mean(np.array(all_predictions) == np.array(all_targets))
     print(f"Test Loss: {test_loss}, Test Accuracy: {test_accuracy}")
-    
-    headers = ["Class", "Accuracy"]
-    table = [[k, v] for k, v in class_accuracy.items()]
-    print(tabulate(table, headers=headers))
+
+
+    # Generate confusion matrix
+    conf_matrix = confusion_matrix(all_targets, all_predictions)
+
+    # Plot confusion matrix
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues")
+    plt.xlabel("Predicted Labels")
+    plt.ylabel("True Labels")
+    plt.title("Confusion Matrix")
+    plt.show()
