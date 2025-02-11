@@ -22,8 +22,10 @@ class DaspsLabeling(Enum):
 
 class DatasetLabel(Enum):
     CONTROL = 0
-    GAD = 1
-    SAD = 2
+    HI_GAD = 1
+    HI_SAD = 2
+    LO_GAD = 3
+    LO_SAD = 4
 
 
 class DatasetEnum(Enum):
@@ -61,29 +63,93 @@ def get_feats_csv_path(seglen: int):
     return os.path.join(features_dir, f'features_{seglen}s.csv')
 
 
+# def custom_random_oversample(features, labels, groups):
+#     # Replace LO_GAD and LO_SAD labels with CONTROL
+#     labels[labels == DatasetLabel.LO_GAD.value] = DatasetLabel.CONTROL.value
+#     labels[labels == DatasetLabel.LO_SAD.value] = DatasetLabel.CONTROL.value
+
+#     label_counts = np.bincount(labels)
+#     max_label_count = np.max(label_counts)
+
+#     print("Label counts before oversampling:")
+#     for label, count in enumerate(label_counts):
+#         print(f"Label {label} - {DatasetLabel(label).name}: {count}")
+
+#     for label in np.unique(labels):
+#         n_to_oversample = max_label_count - label_counts[label]
+
+#         if n_to_oversample == 0:
+#             continue
+
+#         # Get indices of samples with given label
+#         label_indices = np.where(labels == label)[0]
+
+#         # Randomly select samples to oversample
+#         new_samples = np.random.choice(label_indices, n_to_oversample)
+
+#         features = np.vstack([features, features[new_samples]])
+#         labels = np.hstack([labels, labels[new_samples]])
+#         groups = np.hstack([groups, groups[new_samples]])
+
+#     return features, labels, groups
+
 def custom_random_oversample(features, labels, groups):
     label_counts = np.bincount(labels)
-    max_label_count = np.max(label_counts)
-
     print("Label counts before oversampling:")
     for label, count in enumerate(label_counts):
-        print(f"Label {label}: {count}")
+        print(f"Label {label} - {DatasetLabel(label).name}: {count}")
 
-    for label in np.unique(labels):
-        n_to_oversample = max_label_count - label_counts[label]
+    # Balance LO_GAD and LO_SAD
+    lo_gad_count = label_counts[DatasetLabel.LO_GAD.value]
+    lo_sad_count = label_counts[DatasetLabel.LO_SAD.value]
 
-        if n_to_oversample == 0:
-            continue
+    if lo_gad_count > lo_sad_count:
+        label_to_oversample = DatasetLabel.LO_SAD.value
+        n_to_oversample = lo_gad_count - lo_sad_count
+    elif lo_sad_count > lo_gad_count:
+        label_to_oversample = DatasetLabel.LO_GAD.value
+        n_to_oversample = lo_sad_count - lo_gad_count
+    else:
+        label_to_oversample = None
+        n_to_oversample = 0
 
-        # Get indices of samples with given label
-        label_indices = np.where(labels == label)[0]
+    if label_to_oversample is not None:
+        label_indices = np.where(labels == label_to_oversample)[0]
+        if len(label_indices) > 0:
+            new_samples = np.random.choice(label_indices, n_to_oversample)
+            features = np.vstack([features, features[new_samples]])
+            labels = np.hstack([labels, labels[new_samples]])
+            groups = np.hstack([groups, groups[new_samples]])
+        else:
+            print(f"Warning: No samples found for label {label_to_oversample}")
 
-        # Randomly select samples to oversample
-        new_samples = np.random.choice(label_indices, n_to_oversample)
+    # Get new label counts after balancing LO_GAD and LO_SAD
+    label_counts = np.bincount(labels)
+    lo_gad_count = label_counts[DatasetLabel.LO_GAD.value]
+    lo_sad_count = label_counts[DatasetLabel.LO_SAD.value]
+    
+    # Calculate target count for HI_GAD and HI_SAD
+    target_count = lo_gad_count + lo_sad_count
 
-        features = np.vstack([features, features[new_samples]])
-        labels = np.hstack([labels, labels[new_samples]])
-        groups = np.hstack([groups, groups[new_samples]])
+    # Oversample HI_GAD and HI_SAD to match target_count
+    for label in [DatasetLabel.HI_GAD.value, DatasetLabel.HI_SAD.value]:
+        label_count = label_counts[label]
+        n_to_oversample = target_count - label_count
+
+        if n_to_oversample > 0:
+            label_indices = np.where(labels == label)[0]
+            if len(label_indices) > 0:
+                new_samples = np.random.choice(label_indices, n_to_oversample)
+                features = np.vstack([features, features[new_samples]])
+                labels = np.hstack([labels, labels[new_samples]])
+                groups = np.hstack([groups, groups[new_samples]])
+            else:
+                print(f"Warning: No samples found for label {label}")
+
+    print("Label counts after oversampling:")
+    label_counts = np.bincount(labels)
+    for label, count in enumerate(label_counts):
+        print(f"Label {label} - {DatasetLabel(label).name}: {count}")
 
     return features, labels, groups
 
@@ -113,10 +179,6 @@ class BaseDatasetBuilder:
         return df
 
 
-# Following labels will be returned:
-# 0 - Control
-# 1 - GAD
-# 2 - SAD
 class DatasetBuilder(BaseDatasetBuilder):
     _feat_names: list[str] = []
     _feat_domain_prefix = ['time', 'abs_pow', 'rel_pow', 'conn', 'ai']
@@ -124,10 +186,16 @@ class DatasetBuilder(BaseDatasetBuilder):
     def __init__(self, labeling_scheme: LabelingScheme) -> None:
         self._labeling_scheme = labeling_scheme
 
+    def get_uniq_subj_ids(self, seglen: int) -> list[int]:
+        df = self._get_seglen_df(seglen)
+        return df['uniq_subject_id'].unique().tolist()
+
     def build_dataset_df(self, seglen: int, mode="both",
                          domains:
                          list[str] | None = None,
                          p_val_thresh=0.05) -> pd.DataFrame:
+        
+        assert False, "Merge control labels after oversample"
 
         if domains is None:
             domains = ["time", "rel_pow", "conn", "ai"]
@@ -174,23 +242,28 @@ class DatasetBuilder(BaseDatasetBuilder):
 
     def _keep_significant_cols(
             self, df: pd.DataFrame, p_val_thresh: float) -> pd.DataFrame:
-        control = df[df['label'] == DatasetLabel.CONTROL.value].copy()
-        gad = df[df['label'] == DatasetLabel.GAD.value].copy()
-        sad = df[df['label'] == DatasetLabel.SAD.value].copy()
+        low_gad = df[df['label'] == DatasetLabel.LO_GAD.value].copy()
+        gad = df[df['label'] == DatasetLabel.HI_GAD.value].copy()
+        low_sad = df[df['label'] == DatasetLabel.LO_SAD.value].copy()
+        sad = df[df['label'] == DatasetLabel.HI_SAD.value].copy()
 
-        for group in [control, gad, sad]:
+        low_anxiety = pd.concat([low_gad, low_sad])
+
+        for group in [low_anxiety, gad, sad]:
             group.drop(columns=['label', 'uniq_subject_id'],
                        inplace=True)
 
         p_vals = {}
 
-        nonempty_groups = [i for i in [control, gad, sad] if not i.empty]
+        nonempty_groups = [i for i in [low_anxiety, gad, sad] if not i.empty]
 
-        for col in control.columns:
+        # Use low_anxiety columns as reference
+        for col in low_anxiety.columns:
             f_val, p_val = f_oneway(*[group[col] for group in nonempty_groups])
             p_vals[col] = p_val
 
-        for col in control.columns:
+        # Use low_anxiety columns as reference
+        for col in low_anxiety.columns:
             is_feature = any([col.startswith(d)
                              for d in self._feat_domain_prefix])
 
@@ -237,17 +310,17 @@ class DatasetBuilder(BaseDatasetBuilder):
     def _get_dasps_label(self, row: pd.Series) -> DatasetLabel:
         if self._labeling_scheme.dasps_labeling.value == DaspsLabeling.HAM.value:
             if row['ham'] in self._labeling_scheme.lo_level_dasps:
-                return DatasetLabel.CONTROL
+                return DatasetLabel.LO_GAD
             elif row['ham'] in self._labeling_scheme.hi_level_dasps:
-                return DatasetLabel.GAD
+                return DatasetLabel.HI_GAD
             else:
                 raise ValueError(f'Invalid HAM severity: {row["ham"]}')
 
         elif self._labeling_scheme.dasps_labeling.value == DaspsLabeling.SAM.value:
             if row['sam'] in self._labeling_scheme.lo_level_dasps:
-                return DatasetLabel.CONTROL
+                return DatasetLabel.LO_GAD
             elif row['sam'] in self._labeling_scheme.hi_level_dasps:
-                return DatasetLabel.GAD
+                return DatasetLabel.HI_GAD
             else:
                 raise ValueError(f'Invalid SAM severity: {row["sam"]}')
 
@@ -257,9 +330,9 @@ class DatasetBuilder(BaseDatasetBuilder):
         severity = row['stai']
 
         if severity in self._labeling_scheme.lo_level_sad:
-            return DatasetLabel.CONTROL
+            return DatasetLabel.LO_SAD
         elif severity in self._labeling_scheme.hi_level_sad:
-            return DatasetLabel.SAD
+            return DatasetLabel.HI_SAD
 
         raise ValueError(f'Invalid SAD severity: {severity}')
 
@@ -305,6 +378,10 @@ class DatasetBuilder(BaseDatasetBuilder):
         if oversample:
             data, labels, groups = custom_random_oversample(
                 data, labels, groups)
+            
+        # Replace LO_GAD and LO_SAD labels with CONTROL
+        labels[labels == DatasetLabel.LO_GAD.value] = DatasetLabel.CONTROL.value
+        labels[labels == DatasetLabel.LO_SAD.value] = DatasetLabel.CONTROL.value
 
         test_mask = np.isin(groups, test_subj_ids)
 

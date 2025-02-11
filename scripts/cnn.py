@@ -197,7 +197,16 @@ def evaluate_model(model, test_loader, criterion):
 
     avg_loss = torch.stack(losses_).mean().item()
     
-    return avg_loss, all_predictions, all_targets
+    # Calculate accuracy per label
+    label_accuracies = {}
+    for label in set(all_targets):
+        label_indices = [i for i, target in enumerate(all_targets) if target == label]
+        label_predictions = [all_predictions[i] for i in label_indices]
+        correct_predictions = sum(1 for pred in label_predictions if pred == label)
+        accuracy = correct_predictions / len(label_predictions) if len(label_predictions) > 0 else 0
+        label_accuracies[label] = accuracy
+    
+    return avg_loss, all_predictions, all_targets, label_accuracies
 
 
 def train_model(
@@ -256,7 +265,7 @@ def train_model(
             train_acc.append(num_correct/num_samples)
 
             # Evaluate
-            val_loss, all_predictions, all_targets = evaluate_model(model, test_loader, criterion)
+            val_loss, all_predictions, all_targets, _ = evaluate_model(model, test_loader, criterion)
             val_losses.append(val_loss)
             test_acc.append(np.mean(np.array(all_predictions) == np.array(all_targets)))
 
@@ -287,51 +296,51 @@ def train_model(
 
 
 seglen_to_params = {
-    1: { # 0.61
+    1: { # 0.614
         "num_epochs": 40,
         "learning_rate": 0.00001,
         "batch_size": 16,
         "dropout": 0.35,
     },
-    2: { # 0.56
-        "num_epochs": 60,
+    2: { # 0.619
+        "num_epochs": 70,
         "learning_rate": 0.00001,
-        "batch_size": 32,
-        "dropout": 0.35,
+        "batch_size": 16,
+        "dropout": 0.45,
     },
-    3: { # 0.633
-        "num_epochs": 40,
-        "learning_rate": 0.00001,
-        "batch_size": 4,
-        "dropout": 0.4,
-    },
-    5: { # 0.553
+    3: { # 0.621
         "num_epochs": 50,
         "learning_rate": 0.00001,
         "batch_size": 4,
         "dropout": 0.4,
     },
-    10: { # 0.59
-        "num_epochs": 100,
+    5: { # 0.567
+        "num_epochs": 50,
+        "learning_rate": 0.00001,
+        "batch_size": 8,
+        "dropout": 0.4,
+    },
+    10: { # 0.622
+        "num_epochs": 80,
         "learning_rate": 0.00001,
         "batch_size": 4,
         "dropout": 0.4,
     },
-    15: { # 0.597
-        "num_epochs": 100,
+    15: { # 0.534
+        "num_epochs": 80,
         "learning_rate": 0.00001,
-        "batch_size": 4,
+        "batch_size": 16,
         "dropout": 0.4,
     },
     30: { # 0.589
         "num_epochs": 100,
         "learning_rate": 0.00001,
-        "batch_size": 4,
+        "batch_size": 16,
         "dropout": 0.4,
     },
 }
 
-seglen = 3
+seglen = 10
 use_gpu = True
 
 
@@ -365,7 +374,7 @@ if __name__ == "__main__":
     # test_subj_ids = np.random.choice(test_subj_ids, len(test_subj_ids) // 2, replace=False)
 
     train, test = builder.build_deep_datasets_train_test(
-        seglen=seglen, insert_ch_dim=False, test_subj_ids=test_subj_ids, device=device)
+        seglen=seglen, insert_ch_dim=False, test_subj_ids=test_subj_ids, device=device, oversample=True)
 
     data, _ = train[0]
     seq_len = data.shape[-1]
@@ -388,7 +397,7 @@ if __name__ == "__main__":
 
     # Evaluate the model on the test set
     test_loader = DataLoader(test, batch_size=params["batch_size"], shuffle=False)
-    test_loss, all_predictions, all_targets = evaluate_model(model, test_loader, nn.CrossEntropyLoss())
+    test_loss, all_predictions, all_targets, all_accuracies = evaluate_model(model, test_loader, nn.CrossEntropyLoss())
     test_accuracy = np.mean(np.array(all_predictions) == np.array(all_targets))
     print(f"Test Loss: {test_loss}, Test Accuracy: {test_accuracy}")
 
@@ -403,3 +412,7 @@ if __name__ == "__main__":
     plt.ylabel("True Labels")
     plt.title("Confusion Matrix")
     plt.show()
+
+    # Print label accuracies
+    table = tabulate(all_accuracies.items(), headers=['Label', 'Accuracy'])
+    print(table)
