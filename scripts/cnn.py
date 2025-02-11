@@ -175,6 +175,25 @@ def compile_model(model, learning_rate=0.001):
     return criterion, optimizer
 
 
+def evaluate_model(model, test_loader, criterion):
+    model.eval()
+    num_correct = 0
+    num_samples = 0
+    losses_ = []
+
+    with torch.no_grad():
+        for data, targets in test_loader:
+            scores = model.forward(data)
+            loss = criterion(scores, targets)
+            losses_.append(loss.detach())
+            _, predictions = scores.max(1)
+            num_correct += (predictions == targets).sum()
+            num_samples += predictions.size(0)
+
+    avg_loss = torch.stack(losses_).mean().item()
+    accuracy = num_correct / num_samples
+    return avg_loss, accuracy
+
 def train_eval_pytorch_model(
         model, train_dataset, test_dataset, *, num_epochs=100,
         learning_rate=0.001, batch_size=32, last_epochs_avg=10,
@@ -231,27 +250,9 @@ def train_eval_pytorch_model(
             train_acc.append(num_correct/num_samples)
 
             # Evaluate
-            model.eval()
-
-            with torch.no_grad():
-                num_correct = 0
-                num_samples = 0
-
-                losses_ = []
-
-                for data, targets in test_loader:
-                    with record_function("model_inference"):
-                        scores = model.forward(data)
-                    loss = criterion(scores, targets)
-
-                    losses_.append(loss.detach())
-
-                    _, predictions = scores.max(1)
-                    num_correct += (predictions == targets).sum()
-                    num_samples += predictions.size(0)
-
-                val_losses.append(torch.stack(losses_).mean().item())
-                test_acc.append(num_correct/num_samples)
+            val_loss, val_accuracy = evaluate_model(model, test_loader, criterion)
+            val_losses.append(val_loss)
+            test_acc.append(val_accuracy)
 
     if enable_profiling:
         print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
@@ -380,4 +381,8 @@ if __name__ == "__main__":
         model, train, test, num_epochs=params["num_epochs"], learning_rate=params["learning_rate"],
         enable_profiling=False, batch_size=params["batch_size"])
 
-    # torch.save(model.state_dict(), 'trained_model.pth')
+    # Evaluate the model on the test set
+    test_loader = DataLoader(test, batch_size=params["batch_size"], shuffle=False)
+    test_loss, test_accuracy = evaluate_model(model, test_loader, nn.CrossEntropyLoss())
+    print(f"Test Loss: {test_loss}, Test Accuracy: {test_accuracy}")
+
