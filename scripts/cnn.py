@@ -10,6 +10,7 @@ from tqdm.notebook import tqdm
 from torch.utils.data import DataLoader
 from torch.profiler import profile, record_function, ProfilerActivity
 import contextlib
+from tabulate import tabulate
 
 # Inspired by the following
 # https://github.com/CNN-for-EEG-classification/CNN-EEG/blob/main/convNet.py
@@ -180,6 +181,8 @@ def evaluate_model(model, test_loader, criterion):
     num_correct = 0
     num_samples = 0
     losses_ = []
+    class_correct = {}
+    class_total = {}
 
     with torch.no_grad():
         for data, targets in test_loader:
@@ -190,11 +193,17 @@ def evaluate_model(model, test_loader, criterion):
             num_correct += (predictions == targets).sum()
             num_samples += predictions.size(0)
 
+            for label in torch.unique(targets):
+                class_correct[label.item()] = class_correct.get(label.item(), 0) + (predictions[targets == label] == label).sum().item()
+                class_total[label.item()] = class_total.get(label.item(), 0) + (targets == label).sum().item()
+
     avg_loss = torch.stack(losses_).mean().item()
     accuracy = num_correct / num_samples
-    return avg_loss, accuracy
+    class_accuracy = {label: class_correct[label] / class_total[label] for label in class_correct}
+    return avg_loss, accuracy, class_accuracy
 
-def train_eval_pytorch_model(
+
+def train_model(
         model, train_dataset, test_dataset, *, num_epochs=100,
         learning_rate=0.001, batch_size=32, last_epochs_avg=10,
         enable_profiling=False):
@@ -250,7 +259,7 @@ def train_eval_pytorch_model(
             train_acc.append(num_correct/num_samples)
 
             # Evaluate
-            val_loss, val_accuracy = evaluate_model(model, test_loader, criterion)
+            val_loss, val_accuracy, _ = evaluate_model(model, test_loader, criterion)
             val_losses.append(val_loss)
             test_acc.append(val_accuracy)
 
@@ -373,16 +382,18 @@ if __name__ == "__main__":
     # Print labels
     # print(list(train.labels.cpu().numpy()))
 
-
     model = EEGNet(seq_len=seq_len, num_classes=3, dropout=params["dropout"])
     model.to(device)
 
-    train_eval_pytorch_model(
+    train_model(
         model, train, test, num_epochs=params["num_epochs"], learning_rate=params["learning_rate"],
         enable_profiling=False, batch_size=params["batch_size"])
 
     # Evaluate the model on the test set
     test_loader = DataLoader(test, batch_size=params["batch_size"], shuffle=False)
-    test_loss, test_accuracy = evaluate_model(model, test_loader, nn.CrossEntropyLoss())
+    test_loss, test_accuracy, class_accuracy = evaluate_model(model, test_loader, nn.CrossEntropyLoss())
     print(f"Test Loss: {test_loss}, Test Accuracy: {test_accuracy}")
-
+    
+    headers = ["Class", "Accuracy"]
+    table = [[k, v] for k, v in class_accuracy.items()]
+    print(tabulate(table, headers=headers))
