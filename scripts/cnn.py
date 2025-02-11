@@ -88,28 +88,35 @@ class EEGNet(nn.Module):
     def __init__(self, num_classes, seq_len=None, dropout=0.5, num_channels=14):  # num_channels added
         super(EEGNet, self).__init__()
 
+        # 0.617
+
+        n_feats_a = 20
+        n_feats_b = 40
+        n_feats_c = 80
+        n_feats_d = 160
+
         self.model = nn.Sequential(
             # Layer 1
-            nn.Conv1d(in_channels=num_channels, out_channels=20, kernel_size=5, padding=2),
-            nn.BatchNorm1d(20),
+            nn.Conv1d(in_channels=num_channels, out_channels=n_feats_a, kernel_size=7, padding=2),
             nn.LeakyReLU(),
+            nn.BatchNorm1d(n_feats_a),
             nn.Dropout(p=dropout),
 
             # Layer 2
-            nn.Conv1d(in_channels=20, out_channels=40, kernel_size=5, padding=2),
-            nn.BatchNorm1d(40),
+            nn.Conv1d(in_channels=n_feats_a, out_channels=n_feats_b, kernel_size=3, padding=2),
             nn.LeakyReLU(),
+            nn.BatchNorm1d(n_feats_b),
             nn.AvgPool1d(kernel_size=2),
 
             # Layer 3
-            nn.Conv1d(in_channels=40, out_channels=80, kernel_size=3, padding=1),
+            nn.Conv1d(in_channels=n_feats_b, out_channels=n_feats_c, kernel_size=3, padding=1),
             nn.LeakyReLU(),
             nn.Dropout(p=dropout),
 
             # Layer 4
-            nn.Conv1d(in_channels=80, out_channels=160, kernel_size=3, padding=1),
-            nn.BatchNorm1d(160),
+            nn.Conv1d(in_channels=n_feats_c, out_channels=n_feats_d, kernel_size=3, padding=1),
             nn.LeakyReLU(),
+            nn.BatchNorm1d(n_feats_d),
             nn.AvgPool1d(kernel_size=2),
 
             # Global Average Pooling
@@ -119,7 +126,7 @@ class EEGNet(nn.Module):
             nn.Flatten(),
 
             # Linear Layer
-            nn.Linear(160, num_classes),
+            nn.Linear(n_feats_d, num_classes),
             nn.LogSoftmax(dim=1)
         )
 
@@ -308,10 +315,10 @@ seglen_to_params = {
         "batch_size": 16,
         "dropout": 0.45,
     },
-    3: { # 0.621
-        "num_epochs": 50,
+    3: { # 0.629, batch_size=8
+        "num_epochs": 40,
         "learning_rate": 0.00001,
-        "batch_size": 4,
+        "batch_size": 32,
         "dropout": 0.4,
     },
     5: { # 0.567
@@ -340,7 +347,7 @@ seglen_to_params = {
     },
 }
 
-seglen = 10
+seglen = 3
 use_gpu = True
 
 
