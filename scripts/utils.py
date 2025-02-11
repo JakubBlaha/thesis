@@ -65,6 +65,10 @@ def custom_random_oversample(features, labels, groups):
     label_counts = np.bincount(labels)
     max_label_count = np.max(label_counts)
 
+    print("Label counts before oversampling:")
+    for label, count in enumerate(label_counts):
+        print(f"Label {label}: {count}")
+
     for label in np.unique(labels):
         n_to_oversample = max_label_count - label_counts[label]
 
@@ -141,48 +145,6 @@ class DatasetBuilder(BaseDatasetBuilder):
         self._feat_names = df.columns.tolist()[:-2]
 
         return df
-
-    def build_dataset_arrs(self, seglen: int):
-        df = self.build_dataset_df(seglen)
-
-        control_df = df[df['label'] == DatasetLabel.CONTROL.value]
-        gad_df = df[df['label'] == DatasetLabel.GAD.value]
-        sad_df = df[df['label'] == DatasetLabel.SAD.value]
-
-        control_df = control_df.drop(columns=['label', 'uniq_subject_id'])
-        gad_df = gad_df.drop(columns=['label', 'uniq_subject_id'])
-        sad_df = sad_df.drop(columns=['label', 'uniq_subject_id'])
-
-        return control_df.to_numpy(), gad_df.to_numpy(), sad_df.to_numpy()
-
-    def build_control_dataset_df(self, seglen: int) -> pd.DataFrame:
-        df = self._get_seglen_df(seglen)
-        df = self._label_rows(df)
-
-        # Include only low anxiety (control) subjects
-        df = df[df['label'] == DatasetLabel.CONTROL.value]
-
-        df['label'] = df['dataset'].map(
-            {'dasps': DatasetEnum.DASPS.value, 'SAD': DatasetEnum.SAD.value})
-
-        df = self._drop_redundant_columns(df)
-
-        self._feat_names = df.columns.tolist()[:-2]
-
-        return df
-
-    def build_control_dataset_arrs(self, seglen: int):
-        df = self.build_control_dataset_df(seglen)
-
-        # label is a DatasetEnum value
-        dasps_df = df[df['label'] == DatasetEnum.DASPS.value]
-        sad_df = df[df['label'] == DatasetEnum.SAD.value]
-
-        # Remove label and uniq_subject_id
-        dasps_df = dasps_df.drop(columns=['label', 'uniq_subject_id'])
-        sad_df = sad_df.drop(columns=['label', 'uniq_subject_id'])
-
-        return dasps_df.to_numpy(), sad_df.to_numpy()
 
     def get_feat_names(self):
         return self._feat_names
@@ -314,7 +276,7 @@ class DatasetBuilder(BaseDatasetBuilder):
         groups = []
 
         for f in files:
-            epochs = mne.read_epochs(f, preload=True)
+            epochs = mne.read_epochs(f, preload=True, verbose=False)
 
             for index, epoch in enumerate(epochs):
                 metadata = epochs.metadata.iloc[index]
@@ -335,11 +297,6 @@ class DatasetBuilder(BaseDatasetBuilder):
         groups = np.array(groups)
 
         data = normalize_eeg(data).astype(np.float32)
-
-        # print(data[0].mean(axis=1))
-        # print(data[0].var(axis=1))
-
-        print(data.dtype)
 
         unique_groups = np.unique(groups)
         print("Available subject IDs:", unique_groups)
@@ -393,9 +350,6 @@ if __name__ == "__main__":
     # builder = DatasetBuilder(labeling_scheme)
 
     # df = builder.build_dataset_df(10)
-
-    # # Control dataset builder
-    # # dasps, sad = builder.build_control_dataset_arrs(15)
 
     # print(dasps.shape)
     # print(sad.shape)
