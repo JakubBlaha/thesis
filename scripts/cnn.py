@@ -109,9 +109,9 @@ def evaluate_model(model, test_loader, criterion):
 
 
 def train_model(
-        model, train_dataset, test_dataset, *, num_epochs=100,
-        learning_rate=0.001, batch_size=32, last_epochs_avg=10,
-        enable_profiling=False, patience=5):
+        model, train_dataset, test_dataset, *, max_epochs=100,
+        learning_rate=0.001, batch_size=32,
+        enable_profiling=False, patience=10, min_epochs=30):
     print("Train samples: ", len(train_dataset))
     print("Test samples: ", len(test_dataset))
 
@@ -140,7 +140,7 @@ def train_model(
     state_dict = None
 
     with profiler_context as prof:
-        for epoch in tqdm(range(num_epochs)):
+        for epoch in tqdm(range(max_epochs)):
             model.train()
 
             num_correct = 0
@@ -183,7 +183,7 @@ def train_model(
                         state_dict[k] = v.cpu()
             else:
                 epochs_no_improve += 1
-                if epochs_no_improve >= patience:
+                if epochs_no_improve >= patience and epoch >= min_epochs:
                     print("Early stopping triggered!")
                     break
 
@@ -275,6 +275,7 @@ seglen_to_params = {
 device = None
 seglen = 3
 use_gpu = True
+min_epochs = 30
 
 # val_splits = [[
 #     8, 9, 10,  # Low DASPS
@@ -292,7 +293,7 @@ all_subj_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
 
 val_splits = [[i] for i in all_subj_ids]
 
-def leave_subjects_out_cv(model, *, test_subj_ids, labeling_scheme, dataset_builder, seglen, params, max_epochs=100):
+def leave_subjects_out_cv(model, *, test_subj_ids, labeling_scheme, dataset_builder, seglen, params, max_epochs=100, min_epochs=min_epochs):
     train, test = dataset_builder.build_deep_datasets_train_test(
         seglen=seglen, insert_ch_dim=False, test_subj_ids=test_subj_ids, device=device, oversample=True)
     
@@ -301,8 +302,8 @@ def leave_subjects_out_cv(model, *, test_subj_ids, labeling_scheme, dataset_buil
     model.to(device)
 
     return train_model(
-        model, train, test, num_epochs=max_epochs, learning_rate=params["learning_rate"],
-        enable_profiling=False, batch_size=params["batch_size"])
+        model, train, test, max_epochs=max_epochs, learning_rate=params["learning_rate"],
+        enable_profiling=False, batch_size=params["batch_size"], min_epochs=min_epochs)
     
 def gen_conf_matrix(all_targets, all_predictions, labeling_scheme: LabelingScheme):
     uniq_labels = np.unique(all_targets)

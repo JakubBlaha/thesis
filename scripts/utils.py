@@ -112,9 +112,10 @@ def get_feats_csv_path(seglen: int):
 
 def custom_random_oversample(features, labels, groups):
     label_counts = np.bincount(labels)
-    print("Label counts before oversampling:")
-    for label, count in enumerate(label_counts):
-        print(f"Label {label} - {DatasetLabel(label).name}: {count}")
+
+    # print("Label counts before oversampling:")
+    # for label, count in enumerate(label_counts):
+    #     print(f"Label {label} - {DatasetLabel(label).name}: {count}")
 
     # Balance LO_GAD and LO_SAD
     lo_gad_count = label_counts[DatasetLabel.LO_GAD.value]
@@ -163,10 +164,10 @@ def custom_random_oversample(features, labels, groups):
             else:
                 print(f"Warning: No samples found for label {label}")
 
-    print("Label counts after oversampling:")
-    label_counts = np.bincount(labels)
-    for label, count in enumerate(label_counts):
-        print(f"Label {label} - {DatasetLabel(label).name}: {count}")
+    # print("Label counts after oversampling:")
+    # label_counts = np.bincount(labels)
+    # for label, count in enumerate(label_counts):
+    #     print(f"Label {label} - {DatasetLabel(label).name}: {count}")
 
     return features, labels, groups
 
@@ -400,10 +401,6 @@ class DatasetBuilder(BaseDatasetBuilder):
 
         data = normalize_eeg(data).astype(np.float32)
 
-        unique_groups = np.unique(groups)
-        print("Available subject IDs:", unique_groups)
-        print("Test subject IDs:", test_subj_ids)
-
         if oversample:
             data, labels, groups = custom_random_oversample(
                 data, labels, groups)
@@ -434,8 +431,6 @@ class TorchDeepDataset(Dataset):
             data = np.array([i[np.newaxis, :, :] for i in data])
         else:
             data = np.array(data)
-
-        print("Shape", data.shape)
 
         self.epochs = torch.from_numpy(data).float().to(device)
         self.labels = torch.from_numpy(labels).long().to(device)
