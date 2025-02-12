@@ -137,7 +137,7 @@ def train_model(
 
     best_test_acc = 0
     epochs_no_improve = 0
-    state_dict = None
+    best_state_dict = None
 
     with profiler_context as prof:
         for epoch in tqdm(range(max_epochs)):
@@ -171,16 +171,16 @@ def train_model(
             val_losses.append(val_loss)
             test_acc.append(np.mean(np.array(all_predictions) == np.array(all_targets)))
 
-            if test_acc[-1] > best_test_acc:
+            if test_acc[-1] > best_test_acc and epoch >= min_epochs:
                 best_test_acc = test_acc[-1]
                 epochs_no_improve = 0
 
                 # Save model state
-                state_dict = model.state_dict()
+                best_state_dict = model.state_dict()
 
-                for k, v in state_dict.items():
+                for k, v in best_state_dict.items():
                     if isinstance(v, torch.Tensor):
-                        state_dict[k] = v.cpu()
+                        best_state_dict[k] = v.cpu()
             else:
                 epochs_no_improve += 1
                 if epochs_no_improve >= patience and epoch >= min_epochs:
@@ -193,29 +193,13 @@ def train_model(
     train_acc = [float(i) for i in train_acc]
     test_acc = [float(i) for i in test_acc]
 
-    # Plotting with seaborn
-    fig, axs = plt.subplots(1, 2, figsize=(20, 5))
-    configs = [
-        (axs[0], {"Train Loss": train_losses, "Validation Loss": val_losses}, "Loss"),
-        (axs[1], {"Train Accuracy": train_acc, "Test Accuracy": test_acc}, "Accuracy")
-    ]
-    for ax, data_dict, title in configs:
-        for label, values in data_dict.items():
-            sns.lineplot(x=range(len(values)), y=values, ax=ax, label=label)
-        ax.set(ylim=(0, 1))
-        ax.set_title(title)
-        ax.set_ylabel(title)
-        ax.set_xlabel("Epochs")
-
-    plt.show()
-
-    print(f"Max test acc: ", max(test_acc))
-    print(f"Max accuracy epoch: ", np.argmax(test_acc))
+    plot_training_results(train_losses, val_losses, train_acc, test_acc)
 
     # Load the best model
-    model.load_state_dict(state_dict)
+    if best_state_dict is not None:
+        model.load_state_dict(best_state_dict)
 
-    return evaluate_model(model, test_loader, nn.CrossEntropyLoss())
+    return evaluate_model(model, test_loader, nn.CrossEntropyLoss()), test_acc
 
 def seed():
     torch.manual_seed(0)
@@ -233,6 +217,22 @@ def setup_device():
 
     print(f"Using device: {device}")
 
+def plot_training_results(train_losses, val_losses, train_acc, test_acc):
+    # Plotting with seaborn
+    fig, axs = plt.subplots(1, 2, figsize=(20, 5))
+    configs = [
+        (axs[0], {"Train Loss": train_losses, "Validation Loss": val_losses}, "Loss"),
+        (axs[1], {"Train Accuracy": train_acc, "Test Accuracy": test_acc}, "Accuracy")
+    ]
+    for ax, data_dict, title in configs:
+        for label, values in data_dict.items():
+            sns.lineplot(x=range(len(values)), y=values, ax=ax, label=label)
+        ax.set(ylim=(0, 1))
+        ax.set_title(title)
+        ax.set_ylabel(title)
+        ax.set_xlabel("Epochs")
+
+    plt.show()
 
 seglen_to_params = {
     1: { # 0.614
@@ -275,7 +275,8 @@ seglen_to_params = {
 device = None
 seglen = 3
 use_gpu = True
-min_epochs = 30
+min_epochs = 10
+max_epochs = 100
 
 # val_splits = [[
 #     8, 9, 10,  # Low DASPS
@@ -292,8 +293,12 @@ all_subj_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
 ]
 
 val_splits = [[i] for i in all_subj_ids]
+# val_splits = val_splits[:1]
+# val_splits = [114]
 
-def leave_subjects_out_cv(model, *, test_subj_ids, labeling_scheme, dataset_builder, seglen, params, max_epochs=100, min_epochs=min_epochs):
+def leave_subjects_out_cv(model, *, test_subj_ids, labeling_scheme, dataset_builder, seglen, params, max_epochs=max_epochs, min_epochs=min_epochs):
+    print("Test subjects: ", test_subj_ids)
+
     train, test = dataset_builder.build_deep_datasets_train_test(
         seglen=seglen, insert_ch_dim=False, test_subj_ids=test_subj_ids, device=device, oversample=True)
     
@@ -306,8 +311,7 @@ def leave_subjects_out_cv(model, *, test_subj_ids, labeling_scheme, dataset_buil
         enable_profiling=False, batch_size=params["batch_size"], min_epochs=min_epochs)
     
 def gen_conf_matrix(all_targets, all_predictions, labeling_scheme: LabelingScheme):
-    uniq_labels = np.unique(all_targets)
-    uniq_labels_names = [labeling_scheme.get_label_name(i) for i in uniq_labels]
+    uniq_labels_names = [labeling_scheme.get_label_name(i) for i in labeling_scheme.get_possible_labels()]
     conf_matrix = confusion_matrix(all_targets, all_predictions)
 
     plt.figure(figsize=(8, 6))
@@ -333,32 +337,49 @@ if __name__ == "__main__":
     all_predictions = []
     all_targets = []
     all_accuracies = {}
+    best_epochs = []
 
     for test_subjs in val_splits:
         seed()
 
-        _test_loss, _all_predictions, _all_targets, _all_accuracies = leave_subjects_out_cv(EEGNet, test_subj_ids=test_subjs, labeling_scheme=labeling_scheme,
-            dataset_builder=builder, seglen=seglen, params=params, max_epochs=100)
+        (_test_loss, _all_predictions, _all_targets, _label_accuracies), _test_accuracies = leave_subjects_out_cv(EEGNet, test_subj_ids=test_subjs, labeling_scheme=labeling_scheme,
+            dataset_builder=builder, seglen=seglen, params=params)
         
         test_losses.append(_test_loss)
         all_predictions.extend(_all_predictions)
         all_targets.extend(_all_targets)
 
-        for label in set(_all_accuracies.keys()):
+        for label in set(_label_accuracies.keys()):
             if label not in all_accuracies:
                 all_accuracies[label] = []
-            all_accuracies[label].append(_all_accuracies[label])
+            all_accuracies[label].append(_label_accuracies[label])
+
+        _best_epoch = np.argmax(_test_accuracies[min_epochs:]) + min_epochs
+        _best_accuracy = _test_accuracies[_best_epoch]
+
+        best_epochs.append(_best_epoch)
+
+        print(f"Best epoch: {_best_epoch}")
+        print("Best accuracy: ", _best_accuracy)
+        print("----------------")
 
     # Statistics
     total_test_acc = np.mean(np.array(all_predictions) == np.array(all_targets))
     total_test_loss = np.mean(test_losses)
     avg_all_accuracies = {k: np.mean(v) for k, v in all_accuracies.items()}
-    print(f"Total Test Loss: {total_test_loss}")
-    print(f"Total Test Accuracy: {total_test_acc}")
+    print(f"Mean Test Loss: {total_test_loss}")
+    print(f"Mean Test Accuracy: {total_test_acc}")
+
+    # Calculate mean and max of best epochs
+    mean_best_epoch = np.mean(best_epochs)
+    max_best_epoch = np.max(best_epochs)
+    print(f"Mean Best Epoch: {mean_best_epoch}")
+    print(f"Max Best Epoch: {max_best_epoch}")
 
     # Conf matrix
     gen_conf_matrix(all_targets, all_predictions, labeling_scheme)
 
     # Print label accuracies
-    table = tabulate(all_accuracies.items(), headers=['Label', 'Accuracy'])
-    print(table)
+    all_accuracies_mean = {labeling_scheme.get_label_name(k): v for k, v in avg_all_accuracies.items()}
+    table_acc_mean = tabulate(all_accuracies_mean.items(), headers=['Label', 'Mean Accuracy'])
+    print(table_acc_mean)

@@ -9,6 +9,7 @@ from enum import Enum
 from scipy.stats import f_oneway
 from scipy.stats import zscore
 import torch
+import matplotlib.pyplot as plt
 
 from constants import features_dir
 
@@ -65,6 +66,12 @@ class LabelingScheme:
         else:
             raise ValueError(f'Invalid label: {label}')
 
+    def get_possible_labels(self):
+        if self.merge_control:
+            return [DatasetLabel.HI_GAD.value, DatasetLabel.HI_SAD.value, DatasetLabel.LO_GAD.value]
+        else:
+            return [DatasetLabel.HI_GAD.value, DatasetLabel.HI_SAD.value, DatasetLabel.LO_GAD.value, DatasetLabel.LO_SAD.value]
+
 
 def get_extracted_seglens():
     paths = glob.glob(os.path.join(features_dir, 'features_*s.csv'))
@@ -110,12 +117,10 @@ def get_feats_csv_path(seglen: int):
 
 #     return features, labels, groups
 
+
 def custom_random_oversample(features, labels, groups):
     label_counts = np.bincount(labels)
-
-    # print("Label counts before oversampling:")
-    # for label, count in enumerate(label_counts):
-    #     print(f"Label {label} - {DatasetLabel(label).name}: {count}")
+    label_counts_before_oversample = label_counts.copy()
 
     # Balance LO_GAD and LO_SAD
     lo_gad_count = label_counts[DatasetLabel.LO_GAD.value]
@@ -164,10 +169,29 @@ def custom_random_oversample(features, labels, groups):
             else:
                 print(f"Warning: No samples found for label {label}")
 
-    # print("Label counts after oversampling:")
-    # label_counts = np.bincount(labels)
-    # for label, count in enumerate(label_counts):
-    #     print(f"Label {label} - {DatasetLabel(label).name}: {count}")
+    # Create a bar chart of the label distribution
+    label_counts_after_oversample = np.bincount(labels)
+
+    # Create a side-by-side bar chart of the label distribution before and after oversampling
+    label_names = [DatasetLabel(i).name for i in range(len(label_counts))]
+
+    x = np.arange(len(label_names))  # the label locations
+    width = 0.35  # the width of the bars
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+    rects1 = ax.bar(x - width/2, label_counts_before_oversample, width, label='Before Oversampling')
+    rects2 = ax.bar(x + width/2, label_counts_after_oversample, width, label='After Oversampling')
+
+    # Add some text for labels, title and custom x-axis tick labels, etc.
+    ax.set_xlabel('Labels')
+    ax.set_ylabel('Number of samples')
+    ax.set_title('Label Distribution Before and After Oversampling')
+    ax.set_xticks(x, label_names)
+    plt.xticks(rotation=45, ha="right")
+    ax.legend()
+
+    fig.tight_layout()
+    plt.show()
 
     return features, labels, groups
 
@@ -399,15 +423,6 @@ class DatasetBuilder(BaseDatasetBuilder):
         labels = np.array(labels)
         groups = np.array(groups)
 
-        data = normalize_eeg(data).astype(np.float32)
-
-        if oversample:
-            data, labels, groups = custom_random_oversample(
-                data, labels, groups)
-            
-        if self._labeling_scheme.merge_control:
-            labels[labels == DatasetLabel.LO_SAD.value] = DatasetLabel.LO_GAD.value
-
         test_mask = np.isin(groups, test_subj_ids)
 
         train_data = data[~test_mask]
@@ -415,6 +430,18 @@ class DatasetBuilder(BaseDatasetBuilder):
 
         test_data = data[test_mask]
         test_labels = labels[test_mask]
+
+        train_groups = groups[~test_mask]
+
+        if oversample:
+            train_data, train_labels, train_groups = custom_random_oversample(
+                train_data, train_labels, train_groups)
+
+        if self._labeling_scheme.merge_control:
+            labels[labels == DatasetLabel.LO_SAD.value] = DatasetLabel.LO_GAD.value
+
+        train_data = normalize_eeg(train_data).astype(np.float32)
+        test_data = normalize_eeg(test_data).astype(np.float32)
 
         train_torch_dataset = TorchDeepDataset(
             train_data, train_labels, insert_ch_dim=insert_ch_dim, device=device)
