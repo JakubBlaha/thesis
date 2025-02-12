@@ -1,5 +1,5 @@
 # %%
-from utils import DatasetBuilder, LabelingScheme, DaspsLabeling
+from utils import DatasetBuilder, DatasetLabel, LabelingScheme, DaspsLabeling
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -367,7 +367,7 @@ if __name__ == "__main__":
     print(f"Using device: {device}")
 
     # Build dataset
-    labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
+    labeling_scheme = LabelingScheme(DaspsLabeling.HAM, merge_control=False)
     builder = DatasetBuilder(labeling_scheme)
 
     test_subj_ids = [
@@ -382,6 +382,8 @@ if __name__ == "__main__":
 
     train, test = builder.build_deep_datasets_train_test(
         seglen=seglen, insert_ch_dim=False, test_subj_ids=test_subj_ids, device=device, oversample=True)
+    
+    print(train.labels)
 
     data, _ = train[0]
     seq_len = data.shape[-1]
@@ -395,7 +397,9 @@ if __name__ == "__main__":
     # Print labels
     # print(list(train.labels.cpu().numpy()))
 
-    model = EEGNet(seq_len=seq_len, num_classes=3, dropout=params["dropout"])
+    num_classes = labeling_scheme.get_num_classes()
+    print("Num classes:", num_classes)
+    model = EEGNet(seq_len=seq_len, num_classes=num_classes, dropout=params["dropout"])
     model.to(device)
 
     train_model(
@@ -410,11 +414,13 @@ if __name__ == "__main__":
 
 
     # Generate confusion matrix
+    uniq_labels = np.unique(all_targets)
+    uniq_labels_names = [labeling_scheme.get_label_name(i) for i in uniq_labels]
     conf_matrix = confusion_matrix(all_targets, all_predictions)
 
     # Plot confusion matrix
     plt.figure(figsize=(8, 6))
-    sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues")
+    sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues", xticklabels=uniq_labels_names, yticklabels=uniq_labels_names)
     plt.xlabel("Predicted Labels")
     plt.ylabel("True Labels")
     plt.title("Confusion Matrix")

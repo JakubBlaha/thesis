@@ -21,11 +21,10 @@ class DaspsLabeling(Enum):
 
 
 class DatasetLabel(Enum):
-    CONTROL = 0
-    HI_GAD = 1
-    HI_SAD = 2
-    LO_GAD = 3
-    LO_SAD = 4
+    HI_GAD = 0
+    HI_SAD = 1
+    LO_GAD = 2
+    LO_SAD = 3
 
 
 class DatasetEnum(Enum):
@@ -38,7 +37,8 @@ class LabelingScheme:
             self, dasps_labeling: DaspsLabeling, *, lo_level_dasps=[0, 1],
             hi_level_dasps=[2, 3],
             lo_level_sad=[0, 1],
-            hi_level_sad=[2, 3]) -> None:
+            hi_level_sad=[2, 3],
+            merge_control=True) -> None:
         # Make sure low and hi levels do not overlap
         assert len(set(lo_level_dasps) & set(hi_level_dasps)) == 0
 
@@ -47,6 +47,23 @@ class LabelingScheme:
         self.hi_level_dasps = hi_level_dasps
         self.lo_level_sad = lo_level_sad
         self.hi_level_sad = hi_level_sad
+        self.merge_control = merge_control
+
+    def get_num_classes(self):
+        if self.merge_control:
+            return 3
+        else:
+            return 4
+        
+    def get_label_name(self, label: int):
+        if label in [DatasetLabel.HI_GAD.value, DatasetLabel.HI_SAD.value]:
+            return DatasetLabel(label).name
+        elif label in [DatasetLabel.LO_GAD.value, DatasetLabel.LO_SAD.value] and not self.merge_control:
+            return DatasetLabel(label).name
+        elif label == DatasetLabel.LO_GAD.value and self.merge_control:
+            return "CONTROL"
+        else:
+            raise ValueError(f'Invalid label: {label}')
 
 
 def get_extracted_seglens():
@@ -379,9 +396,8 @@ class DatasetBuilder(BaseDatasetBuilder):
             data, labels, groups = custom_random_oversample(
                 data, labels, groups)
             
-        # Replace LO_GAD and LO_SAD labels with CONTROL
-        labels[labels == DatasetLabel.LO_GAD.value] = DatasetLabel.CONTROL.value
-        labels[labels == DatasetLabel.LO_SAD.value] = DatasetLabel.CONTROL.value
+        if self._labeling_scheme.merge_control:
+            labels[labels == DatasetLabel.LO_SAD.value] = DatasetLabel.LO_GAD.value
 
         test_mask = np.isin(groups, test_subj_ids)
 
@@ -401,8 +417,6 @@ class DatasetBuilder(BaseDatasetBuilder):
 
 class TorchDeepDataset(Dataset):
     def __init__(self, data, labels, insert_ch_dim: bool, device=None) -> None:
-        self.max_len = 1024
-
         # Add channel dimension
         if insert_ch_dim:
             data = np.array([i[np.newaxis, :, :] for i in data])
