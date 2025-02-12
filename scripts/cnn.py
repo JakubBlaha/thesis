@@ -188,6 +188,7 @@ def compile_model(model, learning_rate=0.001):
 
 def evaluate_model(model, test_loader, criterion):
     model.eval()
+
     all_predictions = []
     all_targets = []
     losses_ = []
@@ -219,7 +220,7 @@ def evaluate_model(model, test_loader, criterion):
 def train_model(
         model, train_dataset, test_dataset, *, num_epochs=100,
         learning_rate=0.001, batch_size=32, last_epochs_avg=10,
-        enable_profiling=False, patience=5):
+        enable_profiling=False, patience=10):
     print("Train samples: ", len(train_dataset))
     print("Test samples: ", len(test_dataset))
 
@@ -243,13 +244,12 @@ def train_model(
     else:
         profiler_context = contextlib.nullcontext()
 
-    best_val_loss = float('inf')
+    best_test_acc = 0
     epochs_no_improve = 0
-    best_model_state = None
+    state_dict = None
 
     with profiler_context as prof:
         for epoch in tqdm(range(num_epochs)):
-            # Train
             model.train()
 
             num_correct = 0
@@ -280,15 +280,20 @@ def train_model(
             val_losses.append(val_loss)
             test_acc.append(np.mean(np.array(all_predictions) == np.array(all_targets)))
 
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
+            if test_acc[-1] > best_test_acc:
+                best_test_acc = test_acc[-1]
                 epochs_no_improve = 0
-                best_model_state = model.state_dict()  # Save the model's state
+
+                # Save model state
+                state_dict = model.state_dict()
+
+                for k, v in state_dict.items():
+                    if isinstance(v, torch.Tensor):
+                        state_dict[k] = v.cpu()
             else:
                 epochs_no_improve += 1
                 if epochs_no_improve >= patience:
                     print("Early stopping triggered!")
-                    model.load_state_dict(best_model_state)  # Load the best model
                     break
 
     if enable_profiling:
@@ -315,6 +320,9 @@ def train_model(
 
     print(f"Max test acc: ", max(test_acc))
     print(f"Max accuracy epoch: ", np.argmax(test_acc))
+
+    # Load the best model
+    model.load_state_dict(state_dict)
 
 
 seglen_to_params = {
