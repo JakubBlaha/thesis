@@ -203,9 +203,7 @@ class DatasetBuilder(BaseDatasetBuilder):
     def __init__(self, labeling_scheme: LabelingScheme) -> None:
         self._labeling_scheme = labeling_scheme
 
-    def get_uniq_subj_ids(self, seglen: int) -> list[int]:
-        df = self._get_seglen_df(seglen)
-        return df['uniq_subject_id'].unique().tolist()
+
 
     def build_dataset_df(self, seglen: int, mode="both",
                          domains:
@@ -352,14 +350,28 @@ class DatasetBuilder(BaseDatasetBuilder):
             return DatasetLabel.HI_SAD
 
         raise ValueError(f'Invalid SAD severity: {severity}')
-
-    def build_deep_datasets_train_test(
-            self, *, seglen: int, insert_ch_dim: bool, test_subj_ids: list[int], oversample=True,
-            device=None):
+    
+    def _get_segment_files(self, seglen: int):
         clean_segdir_path = os.path.join(
             script_path, f'../data/segmented/{seglen}s/clean')
         files = glob.glob(f'{clean_segdir_path}/*-epo.fif')
         files = sorted(files)
+
+        return files
+    
+    def _get_subj_id_from_path(self, path: str) -> int:
+        return int(os.path.basename(path).strip('-epo.fif').strip('S'))
+
+    def get_subj_ids(self, seglen: int) -> list[int]:
+        files = self._get_segment_files(seglen)
+        subj_ids = [self._get_subj_id_from_path(f) for f in files]
+
+        return subj_ids
+
+    def build_deep_datasets_train_test(
+            self, *, seglen: int, insert_ch_dim: bool, test_subj_ids: list[int], oversample=True,
+            device=None):
+        files = self._get_segment_files(seglen)
 
         data = []
         labels = []

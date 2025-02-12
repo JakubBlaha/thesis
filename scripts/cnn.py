@@ -1,5 +1,5 @@
 # %%
-from utils import DatasetBuilder, DatasetLabel, LabelingScheme, DaspsLabeling
+from utils import DatasetBuilder, LabelingScheme, DaspsLabeling
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -14,78 +14,14 @@ from tabulate import tabulate
 from sklearn.metrics import confusion_matrix
 import seaborn as sns
 import matplotlib.pyplot as plt
+import torch.nn as nn
 
 # Inspired by the following
 # https://github.com/CNN-for-EEG-classification/CNN-EEG/blob/main/convNet.py
 
 
-class ConvNet(nn.Module):
-    def __init__(self, seq_len, num_classes, dropout=0.0):
-        super().__init__()
-
-        self.model = nn.Sequential(
-            # Layer 1
-            nn.ZeroPad2d((15, 15, 0, 0)),
-            nn.Conv2d(in_channels=1, out_channels=20,
-                      kernel_size=(1, 31), stride=(1, 1), padding=0),
-            nn.LeakyReLU(),
-            nn.Dropout(p=dropout),
-
-            # Layer 2
-            nn.Conv2d(in_channels=20, out_channels=40,
-                      kernel_size=(2, 1), stride=(2, 1), padding=0),
-            nn.BatchNorm2d(40, affine=True),
-            nn.LeakyReLU(),
-            nn.MaxPool2d(kernel_size=(1, 3), stride=(1, 2)),
-
-            # Layer 3
-            nn.Conv2d(in_channels=40, out_channels=80,
-                      kernel_size=(1, 21), stride=(1, 1)),
-            nn.LeakyReLU(),
-            nn.Dropout(p=dropout),
-
-            # Pool 2
-            nn.MaxPool2d(kernel_size=(1, 2), stride=(1, 2)),
-            nn.Conv2d(in_channels=80, out_channels=160,
-                      kernel_size=(1, 11), stride=(1, 1)),
-            nn.BatchNorm2d(160, affine=True),
-            nn.LeakyReLU(),
-            nn.Dropout(p=dropout),
-
-            # Pool 3
-            nn.MaxPool2d(kernel_size=(1, 3), stride=(1, 3)),
-
-            # Layer 5
-            nn.Conv2d(in_channels=160, out_channels=160,
-                      kernel_size=(7, 1), stride=(7, 1)),
-            nn.BatchNorm2d(160, affine=True),
-            nn.LeakyReLU(),
-
-            # Pool 4
-            nn.MaxPool2d(kernel_size=(1, 3), stride=(1, 3)),
-
-            # Flatten layer
-            nn.Flatten(start_dim=1),
-
-            # Linear Layer
-            nn.Linear(5280, num_classes),
-            nn.LogSoftmax(dim=1)
-        )
-
-    def forward(self, x):
-        # print(x.shape)
-
-        for i, layer in enumerate(self.model):
-            x = layer(x)
-            # print(
-            #     f"Layer {i}: {layer.__class__.__name__}, Output Shape: {x.shape}")
-        return x
-    
-
-import torch.nn as nn
-
 class EEGNet(nn.Module):
-    def __init__(self, num_classes, seq_len=None, dropout=0.5, num_channels=14):  # num_channels added
+    def __init__(self, num_classes, dropout=0.5, num_channels=14):  # num_channels added
         super(EEGNet, self).__init__()
 
         # 0.617
@@ -134,51 +70,6 @@ class EEGNet(nn.Module):
         return self.model(x)
 
 
-# class ConvNetCustom(nn.Module):
-#     def __init__(self, seq_len, num_classes=0, dropout=0.0):
-#         super().__init__()
-
-#         self.model = nn.Sequential(
-#             nn.ZeroPad2d((15, 15, 0, 0)),
-#             nn.Conv2d(in_channels=1, out_channels=20, kernel_size=(1, 31), stride=(1, 1), padding=0),
-#             nn.LeakyReLU(),
-#             nn.Dropout(p=dropout),
-
-#             nn.Conv2d(in_channels=20, out_channels=40, kernel_size=(2, 1), stride=(2, 1), padding=0),
-#             nn.BatchNorm2d(40, affine=False),
-#             nn.LeakyReLU(),
-#             nn.MaxPool2d(kernel_size=(1, 3), stride=(1, 2)),
-
-#             nn.Conv2d(in_channels=40, out_channels=80, kernel_size=(1, 21), stride=(1, 1)),
-#             nn.LeakyReLU(),
-#             nn.Dropout(p=dropout),
-#             nn.MaxPool2d(kernel_size=(1, 2), stride=(1, 2)),
-
-#             nn.Conv2d(in_channels=80, out_channels=160, kernel_size=(1, 11), stride=(1, 1)),
-#             nn.BatchNorm2d(160, affine=False),
-#             nn.LeakyReLU(),
-#             nn.Dropout(p=dropout),
-#             nn.MaxPool2d(kernel_size=(1, 3), stride=(1, 3)),
-
-#             nn.Conv2d(in_channels=160, out_channels=160, kernel_size=(7, 1), stride=(7, 1)),
-#             nn.BatchNorm2d(160, affine=False),
-#             nn.LeakyReLU(),
-#             nn.MaxPool2d(kernel_size=(1, 3), stride=(1, 3)),
-
-#             nn.Flatten(start_dim=1),
-
-#             nn.Linear(4 * 160, num_classes),
-#             nn.LogSoftmax(dim=1)
-#         )
-
-#     def forward(self, x):
-#         for i, layer in enumerate(self.model):
-#             x = layer(x)
-#             print(f"Layer {i}: {
-#                   layer.__class__.__name__}, Output Shape: {x.shape}")
-#         return x
-
-
 def compile_model(model, learning_rate=0.001):
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
@@ -220,7 +111,7 @@ def evaluate_model(model, test_loader, criterion):
 def train_model(
         model, train_dataset, test_dataset, *, num_epochs=100,
         learning_rate=0.001, batch_size=32, last_epochs_avg=10,
-        enable_profiling=False, patience=10):
+        enable_profiling=False, patience=5):
     print("Train samples: ", len(train_dataset))
     print("Test samples: ", len(test_dataset))
 
@@ -324,6 +215,24 @@ def train_model(
     # Load the best model
     model.load_state_dict(state_dict)
 
+    return evaluate_model(model, test_loader, nn.CrossEntropyLoss())
+
+def seed():
+    torch.manual_seed(0)
+    np.random.seed(0)
+
+def setup_device():
+    global device
+
+    if torch.backends.mps.is_available() and use_gpu:
+        device = torch.device("mps")
+    elif torch.cuda.is_available() and use_gpu:
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
+
+    print(f"Using device: {device}")
+
 
 seglen_to_params = {
     1: { # 0.614
@@ -363,84 +272,91 @@ seglen_to_params = {
     },
 }
 
+device = None
 seglen = 3
 use_gpu = True
 
+# val_splits = [[
+#     8, 9, 10,  # Low DASPS
+#     1, 2, 3, 4, 5, 6, 7, # High DASPS
+#     *range(101, 106), # Low SAD
+#     *range(401, 408)  # High SAD
+# ]]
 
-if __name__ == "__main__":
-    # Seed
-    torch.manual_seed(0)
-    np.random.seed(0)
+all_subj_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+                17, 18, 19, 20, 21, 22, 23, 101, 102, 103, 104, 105, 106,
+                107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118,
+                119, 120, 121, 401, 402, 403, 404, 405, 406,
+                407, 408, 409, 410, 411, 412, 413, 414, 415, 416, 417, 418, 419, 420, 421
+]
 
-    # Setup HW acceleration
-    if torch.backends.mps.is_available() and use_gpu:
-        device = torch.device("mps")
-    elif torch.cuda.is_available() and use_gpu:
-        device = torch.device("cuda")
-    else:
-        device = torch.device("cpu")
+val_splits = [[i] for i in all_subj_ids]
 
-    print(f"Using device: {device}")
-
-    # Build dataset
-    labeling_scheme = LabelingScheme(DaspsLabeling.HAM, merge_control=False)
-    builder = DatasetBuilder(labeling_scheme)
-
-    test_subj_ids = [
-        8, 9, 10,  # Low DASPS
-        1, 2, 3, 4, 5, 6, 7, # High DASPS
-        *range(101, 106), # Low SAD
-        *range(401, 408)  # High SAD
-    ]
-
-    # Remove half of test subjects randomly
-    # test_subj_ids = np.random.choice(test_subj_ids, len(test_subj_ids) // 2, replace=False)
-
-    train, test = builder.build_deep_datasets_train_test(
+def leave_subjects_out_cv(model, *, test_subj_ids, labeling_scheme, dataset_builder, seglen, params, max_epochs=100):
+    train, test = dataset_builder.build_deep_datasets_train_test(
         seglen=seglen, insert_ch_dim=False, test_subj_ids=test_subj_ids, device=device, oversample=True)
     
-    print(train.labels)
-
-    data, _ = train[0]
-    seq_len = data.shape[-1]
-    print("Seq len: ", train[0][0].shape[-1])
-
-    params = seglen_to_params.get(seglen)
-
-    if params is None:
-        raise ValueError(f"No parameters defined for seglen: {seglen}")
-
-    # Print labels
-    # print(list(train.labels.cpu().numpy()))
-
     num_classes = labeling_scheme.get_num_classes()
-    print("Num classes:", num_classes)
-    model = EEGNet(seq_len=seq_len, num_classes=num_classes, dropout=params["dropout"])
+    model = EEGNet(num_classes=num_classes, dropout=params["dropout"])
     model.to(device)
 
-    train_model(
-        model, train, test, num_epochs=100, learning_rate=params["learning_rate"],
+    return train_model(
+        model, train, test, num_epochs=max_epochs, learning_rate=params["learning_rate"],
         enable_profiling=False, batch_size=params["batch_size"])
-
-    # Evaluate the model on the test set
-    test_loader = DataLoader(test, batch_size=params["batch_size"], shuffle=False)
-    test_loss, all_predictions, all_targets, all_accuracies = evaluate_model(model, test_loader, nn.CrossEntropyLoss())
-    test_accuracy = np.mean(np.array(all_predictions) == np.array(all_targets))
-    print(f"Test Loss: {test_loss}, Test Accuracy: {test_accuracy}")
-
-
-    # Generate confusion matrix
+    
+def gen_conf_matrix(all_targets, all_predictions, labeling_scheme: LabelingScheme):
     uniq_labels = np.unique(all_targets)
     uniq_labels_names = [labeling_scheme.get_label_name(i) for i in uniq_labels]
     conf_matrix = confusion_matrix(all_targets, all_predictions)
 
-    # Plot confusion matrix
     plt.figure(figsize=(8, 6))
     sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues", xticklabels=uniq_labels_names, yticklabels=uniq_labels_names)
     plt.xlabel("Predicted Labels")
     plt.ylabel("True Labels")
     plt.title("Confusion Matrix")
     plt.show()
+
+if __name__ == "__main__":
+    setup_device()
+
+    # Build dataset
+    labeling_scheme = LabelingScheme(DaspsLabeling.HAM, merge_control=False)
+    builder = DatasetBuilder(labeling_scheme)
+
+    params = seglen_to_params.get(seglen)
+
+    if params is None:
+        raise ValueError(f"No parameters defined for seglen: {seglen}")
+    
+    test_losses = []
+    all_predictions = []
+    all_targets = []
+    all_accuracies = {}
+
+    for test_subjs in val_splits:
+        seed()
+
+        _test_loss, _all_predictions, _all_targets, _all_accuracies = leave_subjects_out_cv(EEGNet, test_subj_ids=test_subjs, labeling_scheme=labeling_scheme,
+            dataset_builder=builder, seglen=seglen, params=params, max_epochs=100)
+        
+        test_losses.append(_test_loss)
+        all_predictions.extend(_all_predictions)
+        all_targets.extend(_all_targets)
+
+        for label in set(_all_accuracies.keys()):
+            if label not in all_accuracies:
+                all_accuracies[label] = []
+            all_accuracies[label].append(_all_accuracies[label])
+
+    # Statistics
+    total_test_acc = np.mean(np.array(all_predictions) == np.array(all_targets))
+    total_test_loss = np.mean(test_losses)
+    avg_all_accuracies = {k: np.mean(v) for k, v in all_accuracies.items()}
+    print(f"Total Test Loss: {total_test_loss}")
+    print(f"Total Test Accuracy: {total_test_acc}")
+
+    # Conf matrix
+    gen_conf_matrix(all_targets, all_predictions, labeling_scheme)
 
     # Print label accuracies
     table = tabulate(all_accuracies.items(), headers=['Label', 'Accuracy'])
