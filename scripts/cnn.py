@@ -219,7 +219,7 @@ def evaluate_model(model, test_loader, criterion):
 def train_model(
         model, train_dataset, test_dataset, *, num_epochs=100,
         learning_rate=0.001, batch_size=32, last_epochs_avg=10,
-        enable_profiling=False):
+        enable_profiling=False, patience=5):
     print("Train samples: ", len(train_dataset))
     print("Test samples: ", len(test_dataset))
 
@@ -242,6 +242,10 @@ def train_model(
             record_shapes=True)
     else:
         profiler_context = contextlib.nullcontext()
+
+    best_val_loss = float('inf')
+    epochs_no_improve = 0
+    best_model_state = None
 
     with profiler_context as prof:
         for epoch in tqdm(range(num_epochs)):
@@ -276,6 +280,17 @@ def train_model(
             val_losses.append(val_loss)
             test_acc.append(np.mean(np.array(all_predictions) == np.array(all_targets)))
 
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                epochs_no_improve = 0
+                best_model_state = model.state_dict()  # Save the model's state
+            else:
+                epochs_no_improve += 1
+                if epochs_no_improve >= patience:
+                    print("Early stopping triggered!")
+                    model.load_state_dict(best_model_state)  # Load the best model
+                    break
+
     if enable_profiling:
         print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
 
@@ -304,43 +319,36 @@ def train_model(
 
 seglen_to_params = {
     1: { # 0.614
-        "num_epochs": 40,
         "learning_rate": 0.00001,
         "batch_size": 16,
         "dropout": 0.35,
     },
     2: { # 0.619
-        "num_epochs": 70,
         "learning_rate": 0.00001,
         "batch_size": 16,
         "dropout": 0.45,
     },
     3: { # 0.629, batch_size=8
-        "num_epochs": 40,
         "learning_rate": 0.00001,
         "batch_size": 32,
         "dropout": 0.4,
     },
     5: { # 0.567
-        "num_epochs": 50,
         "learning_rate": 0.00001,
         "batch_size": 8,
         "dropout": 0.4,
     },
     10: { # 0.622
-        "num_epochs": 80,
         "learning_rate": 0.00001,
         "batch_size": 4,
         "dropout": 0.4,
     },
     15: { # 0.534
-        "num_epochs": 80,
         "learning_rate": 0.00001,
         "batch_size": 16,
         "dropout": 0.4,
     },
     30: { # 0.589
-        "num_epochs": 100,
         "learning_rate": 0.00001,
         "batch_size": 16,
         "dropout": 0.4,
@@ -403,7 +411,7 @@ if __name__ == "__main__":
     model.to(device)
 
     train_model(
-        model, train, test, num_epochs=params["num_epochs"], learning_rate=params["learning_rate"],
+        model, train, test, num_epochs=100, learning_rate=params["learning_rate"],
         enable_profiling=False, batch_size=params["batch_size"])
 
     # Evaluate the model on the test set
