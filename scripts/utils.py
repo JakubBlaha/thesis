@@ -173,25 +173,25 @@ def custom_random_oversample(features, labels, groups):
     label_counts_after_oversample = np.bincount(labels)
 
     # Create a side-by-side bar chart of the label distribution before and after oversampling
-    label_names = [DatasetLabel(i).name for i in range(len(label_counts))]
+    # label_names = [DatasetLabel(i).name for i in range(len(label_counts))]
 
-    x = np.arange(len(label_names))  # the label locations
-    width = 0.35  # the width of the bars
+    # x = np.arange(len(label_names))  # the label locations
+    # width = 0.35  # the width of the bars
 
-    fig, ax = plt.subplots(figsize=(12, 6))
-    rects1 = ax.bar(x - width/2, label_counts_before_oversample, width, label='Before Oversampling')
-    rects2 = ax.bar(x + width/2, label_counts_after_oversample, width, label='After Oversampling')
+    # fig, ax = plt.subplots(figsize=(12, 6))
+    # rects1 = ax.bar(x - width/2, label_counts_before_oversample, width, label='Before Oversampling')
+    # rects2 = ax.bar(x + width/2, label_counts_after_oversample, width, label='After Oversampling')
 
-    # Add some text for labels, title and custom x-axis tick labels, etc.
-    ax.set_xlabel('Labels')
-    ax.set_ylabel('Number of samples')
-    ax.set_title('Label Distribution Before and After Oversampling')
-    ax.set_xticks(x, label_names)
-    plt.xticks(rotation=45, ha="right")
-    ax.legend()
+    # # Add some text for labels, title and custom x-axis tick labels, etc.
+    # ax.set_xlabel('Labels')
+    # ax.set_ylabel('Number of samples')
+    # ax.set_title('Label Distribution Before and After Oversampling')
+    # ax.set_xticks(x, label_names)
+    # plt.xticks(rotation=45, ha="right")
+    # ax.legend()
 
-    fig.tight_layout()
-    plt.show()
+    # fig.tight_layout()
+    # plt.show()
 
     return features, labels, groups
 
@@ -438,7 +438,21 @@ class DatasetBuilder(BaseDatasetBuilder):
                 train_data, train_labels, train_groups)
 
         if self._labeling_scheme.merge_control:
-            labels[labels == DatasetLabel.LO_SAD.value] = DatasetLabel.LO_GAD.value
+            test_labels[test_labels == DatasetLabel.LO_SAD.value] = DatasetLabel.LO_GAD.value
+            train_labels[train_labels == DatasetLabel.LO_SAD.value] = DatasetLabel.LO_GAD.value
+
+        # Count values
+        train_label_counts = np.bincount(train_labels)
+        print("Train label counts:")
+        for label, count in enumerate(train_label_counts):
+            print(f"Label {label} - {DatasetLabel(label).name}: {count}")
+
+        print()
+
+        test_label_counts = np.bincount(test_labels)
+        print("Test label counts:")
+        for label, count in enumerate(test_label_counts):
+            print(f"Label {label} - {DatasetLabel(label).name}: {count}")
 
         train_data = normalize_eeg(train_data).astype(np.float32)
         test_data = normalize_eeg(test_data).astype(np.float32)
@@ -480,9 +494,9 @@ if __name__ == "__main__":
     # print(sad.shape)
 
     # Deep dataset builder
-    labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
+    labeling_scheme = LabelingScheme(DaspsLabeling.HAM, merge_control=True)
     builder = DatasetBuilder(labeling_scheme)
 
-    train, test = builder.build_deep_datasets_train_test(seglen=10, insert_ch_dim=False, test_subj_ids=[1, 2, 3])
+    train, test = builder.build_deep_datasets_train_test(seglen=3, insert_ch_dim=False, test_subj_ids=[1, 2, 3, 102, 103, 104, 401, 403, 405])
 
 # %%

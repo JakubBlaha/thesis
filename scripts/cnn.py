@@ -70,8 +70,12 @@ class EEGNet(nn.Module):
         return self.model(x)
 
 
-def compile_model(model, learning_rate=0.001):
-    criterion = nn.CrossEntropyLoss()
+def compile_model(model, learning_rate=0.001, class_weights=None):
+    if class_weights is not None:
+        class_weights = torch.tensor(class_weights, dtype=torch.float).to(device)
+        criterion = nn.CrossEntropyLoss(weight=class_weights)
+    else:
+        criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     # optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
     return criterion, optimizer
@@ -111,11 +115,11 @@ def evaluate_model(model, test_loader, criterion):
 def train_model(
         model, train_dataset, test_dataset, *, max_epochs=100,
         learning_rate=0.001, batch_size=32,
-        enable_profiling=False, patience=10, min_epochs=30):
+        enable_profiling=False, patience=20, min_epochs=30, class_weights=None):
     print("Train samples: ", len(train_dataset))
     print("Test samples: ", len(test_dataset))
 
-    criterion, optimizer = compile_model(model, learning_rate)
+    criterion, optimizer = compile_model(model, learning_rate, class_weights)
 
     train_losses = []
     val_losses = []
@@ -138,6 +142,8 @@ def train_model(
     best_test_acc = 0
     epochs_no_improve = 0
     best_state_dict = None
+    
+    best_val_loss = float('inf') # Initialize with a very high value
 
     with profiler_context as prof:
         for epoch in tqdm(range(max_epochs)):
@@ -171,8 +177,8 @@ def train_model(
             val_losses.append(val_loss)
             test_acc.append(np.mean(np.array(all_predictions) == np.array(all_targets)))
 
-            if test_acc[-1] > best_test_acc and epoch >= min_epochs:
-                best_test_acc = test_acc[-1]
+            if val_loss < best_val_loss and epoch >= min_epochs:
+                best_val_loss = val_loss
                 epochs_no_improve = 0
 
                 # Save model state
@@ -239,36 +245,45 @@ seglen_to_params = {
         "learning_rate": 0.00001,
         "batch_size": 16,
         "dropout": 0.35,
+        "class_weights": None
     },
     2: { # 0.619
         "learning_rate": 0.00001,
         "batch_size": 16,
         "dropout": 0.45,
+        "class_weights": None
     },
     3: { # 0.629, batch_size=8
         "learning_rate": 0.00001,
         "batch_size": 32,
         "dropout": 0.4,
-    },
-    5: { # 0.567
+        # "class_weights": [1.05, 1.08, 1.3, 1.19]
+        # "class_weights": None,
+        "class_weights": [1, 1, 1.3],
+        },
+        5: { # 0.567
         "learning_rate": 0.00001,
         "batch_size": 8,
         "dropout": 0.4,
+        "class_weights": None
     },
     10: { # 0.622
         "learning_rate": 0.00001,
         "batch_size": 4,
         "dropout": 0.4,
+        "class_weights": None
     },
     15: { # 0.534
         "learning_rate": 0.00001,
         "batch_size": 16,
         "dropout": 0.4,
+        "class_weights": None
     },
     30: { # 0.589
         "learning_rate": 0.00001,
         "batch_size": 16,
         "dropout": 0.4,
+        "class_weights": None
     },
 }
 
@@ -293,8 +308,8 @@ all_subj_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
 ]
 
 val_splits = [[i] for i in all_subj_ids]
-# val_splits = val_splits[:1]
-# val_splits = [114]
+# val_splits = val_split  s[:1]
+# val_splits = [[i] for i in [4, 5, 7, 9, 10, 14, 15, 18, 23, 20, 108, 118, 402, 405, 413]]
 
 def leave_subjects_out_cv(model, *, test_subj_ids, labeling_scheme, dataset_builder, seglen, params, max_epochs=max_epochs, min_epochs=min_epochs):
     print("Test subjects: ", test_subj_ids)
@@ -308,7 +323,7 @@ def leave_subjects_out_cv(model, *, test_subj_ids, labeling_scheme, dataset_buil
 
     return train_model(
         model, train, test, max_epochs=max_epochs, learning_rate=params["learning_rate"],
-        enable_profiling=False, batch_size=params["batch_size"], min_epochs=min_epochs)
+        enable_profiling=False, batch_size=params["batch_size"], min_epochs=min_epochs, class_weights=params["class_weights"])
     
 def gen_conf_matrix(all_targets, all_predictions, labeling_scheme: LabelingScheme):
     uniq_labels_names = [labeling_scheme.get_label_name(i) for i in labeling_scheme.get_possible_labels()]
@@ -325,7 +340,7 @@ if __name__ == "__main__":
     setup_device()
 
     # Build dataset
-    labeling_scheme = LabelingScheme(DaspsLabeling.HAM, merge_control=False)
+    labeling_scheme = LabelingScheme(DaspsLabeling.HAM, merge_control=True)
     builder = DatasetBuilder(labeling_scheme)
 
     params = seglen_to_params.get(seglen)
@@ -338,6 +353,7 @@ if __name__ == "__main__":
     all_targets = []
     all_accuracies = {}
     best_epochs = []
+    group_test_accuracies = {}
 
     for test_subjs in val_splits:
         seed()
@@ -363,6 +379,8 @@ if __name__ == "__main__":
         print("Best accuracy: ", _best_accuracy)
         print("----------------")
 
+        group_test_accuracies[tuple(test_subjs)] = _best_accuracy
+
     # Statistics
     total_test_acc = np.mean(np.array(all_predictions) == np.array(all_targets))
     total_test_loss = np.mean(test_losses)
@@ -383,3 +401,14 @@ if __name__ == "__main__":
     all_accuracies_mean = {labeling_scheme.get_label_name(k): v for k, v in avg_all_accuracies.items()}
     table_acc_mean = tabulate(all_accuracies_mean.items(), headers=['Label', 'Mean Accuracy'])
     print(table_acc_mean)
+
+    # Print test accuracies for each group
+    print("\nTest Accuracies for Each Group:")
+    for group, accuracy in group_test_accuracies.items():
+        print(f"Group {group}: {accuracy:.2f}")
+
+    # Print class weights
+    if params["class_weights"] is not None:
+        print("Class weights: ", params["class_weights"])
+
+    print("Script execution finished.")

@@ -5,7 +5,6 @@ import h5py
 import numpy as np
 import pandas as pd
 import glob
-from matplotlib import pyplot as plt
 
 from constants import CHANNEL_NAMES, TARGET_SAMPLING_FREQ
 
@@ -57,7 +56,7 @@ def get_epochs_from_mat(fname, subject_id):
         {"subject": [subject_id] * len(epochs),
          "dataset": ["dasps"] * len(epochs)})
 
-    epochs.compute_psd(fmin=0, fmax=64).plot()
+    # epochs.compute_psd(fmin=0, fmax=64).plot()
     # plt.show()
 
     # Filtering
