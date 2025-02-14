@@ -24,12 +24,13 @@ class EEGNet(nn.Module):
     def __init__(self, num_classes, dropout=0.5, num_channels=14):  # num_channels added
         super(EEGNet, self).__init__()
 
-        # 0.617
+        n_feats_base = 20
+        feat_grow_rate = 2
 
-        n_feats_a = 20
-        n_feats_b = 40
-        n_feats_c = 80
-        n_feats_d = 160
+        n_feats_a = int(n_feats_base)
+        n_feats_b = int(n_feats_base * feat_grow_rate)
+        n_feats_c = int(n_feats_base * (feat_grow_rate ** 2))
+        n_feats_d = int(n_feats_base * (feat_grow_rate ** 3))
 
         self.model = nn.Sequential(
             # Layer 1
@@ -70,7 +71,7 @@ class EEGNet(nn.Module):
         return self.model(x)
 
 
-def compile_model(model, learning_rate=0.001, class_weights=None):
+def compile_model(model, learning_rate=0.001, class_weights=None, l1_lambda=0.0):
     if class_weights is not None:
         class_weights = torch.tensor(class_weights, dtype=torch.float).to(device)
         criterion = nn.CrossEntropyLoss(weight=class_weights)
@@ -115,7 +116,7 @@ def evaluate_model(model, test_loader, criterion):
 def train_model(
         model, train_dataset, test_dataset, *, max_epochs=100,
         learning_rate=0.001, batch_size=32,
-        enable_profiling=False, patience=20, min_epochs=30, class_weights=None):
+        enable_profiling=False, patience=5, min_epochs=30, class_weights=None, l1_lambda=0.0):
     print("Train samples: ", len(train_dataset))
     print("Test samples: ", len(test_dataset))
 
@@ -139,11 +140,11 @@ def train_model(
     else:
         profiler_context = contextlib.nullcontext()
 
-    best_test_acc = 0
     epochs_no_improve = 0
     best_state_dict = None
     
     best_val_loss = float('inf') # Initialize with a very high value
+    best_val_acc = 0.0
 
     with profiler_context as prof:
         for epoch in tqdm(range(max_epochs)):
@@ -158,6 +159,10 @@ def train_model(
                 with record_function("model_inference"):
                     scores = model.forward(data)
                 loss = criterion(scores, targets)
+
+                # L1 regularization
+                l1_norm = sum(p.abs().sum() for p in model.parameters())
+                loss = loss + l1_lambda * l1_norm
 
                 losses_.append(loss.detach())
 
@@ -177,8 +182,10 @@ def train_model(
             val_losses.append(val_loss)
             test_acc.append(np.mean(np.array(all_predictions) == np.array(all_targets)))
 
-            if val_loss < best_val_loss and epoch >= min_epochs:
-                best_val_loss = val_loss
+            current_val_accuracy = test_acc[-1]
+
+            if current_val_accuracy > best_val_acc and epoch >= min_epochs:
+                best_val_acc = current_val_accuracy
                 epochs_no_improve = 0
 
                 # Save model state
@@ -240,65 +247,27 @@ def plot_training_results(train_losses, val_losses, train_acc, test_acc):
 
     plt.show()
 
-seglen_to_params = {
-    1: { # 0.614
-        "learning_rate": 0.00001,
-        "batch_size": 16,
-        "dropout": 0.35,
-        "class_weights": None
-    },
-    2: { # 0.619
-        "learning_rate": 0.00001,
-        "batch_size": 16,
-        "dropout": 0.45,
-        "class_weights": None
-    },
-    3: { # 0.629, batch_size=8
-        "learning_rate": 0.00001,
-        "batch_size": 32,
-        "dropout": 0.4,
-        # "class_weights": [1.05, 1.08, 1.3, 1.19]
-        # "class_weights": None,
-        "class_weights": [1, 1, 1.3],
-        },
-        5: { # 0.567
-        "learning_rate": 0.00001,
-        "batch_size": 8,
-        "dropout": 0.4,
-        "class_weights": None
-    },
-    10: { # 0.622
-        "learning_rate": 0.00001,
-        "batch_size": 4,
-        "dropout": 0.4,
-        "class_weights": None
-    },
-    15: { # 0.534
-        "learning_rate": 0.00001,
-        "batch_size": 16,
-        "dropout": 0.4,
-        "class_weights": None
-    },
-    30: { # 0.589
-        "learning_rate": 0.00001,
-        "batch_size": 16,
-        "dropout": 0.4,
-        "class_weights": None
-    },
-}
+# Global variables for parameters
+mode = "both"
+learning_rate = 0.00001
+batch_size = 16
+dropout = 0.4
+# class_weights = [1.3, 1, 1.3]
+class_weights = [1, 1, 1.3]
+l1_lambda = 0.0000
+seglen = 3
 
 device = None
-seglen = 3
 use_gpu = True
 min_epochs = 10
 max_epochs = 100
 
-# val_splits = [[
-#     8, 9, 10,  # Low DASPS
-#     1, 2, 3, 4, 5, 6, 7, # High DASPS
-#     *range(101, 106), # Low SAD
-#     *range(401, 408)  # High SAD
-# ]]
+val_splits = [[
+    8, 9, 10,  # Low DASPS
+    4, 5, 7, # High DASPS
+    108, 118, 119, # Low SAD
+    402, 405, 413  # High SAD
+]]
 
 all_subj_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
                 17, 18, 19, 20, 21, 22, 23, 101, 102, 103, 104, 105, 106,
@@ -308,22 +277,26 @@ all_subj_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
 ]
 
 val_splits = [[i] for i in all_subj_ids]
-# val_splits = val_split  s[:1]
+# val_splits = val_splits[:1]
 # val_splits = [[i] for i in [4, 5, 7, 9, 10, 14, 15, 18, 23, 20, 108, 118, 402, 405, 413]]
+# val_splits = [[4, 5, 7, 9, 10, 14, 15, 18, 23, 20, 108, 118, 402, 405, 413]]
+# val_splits = [[1]]
 
-def leave_subjects_out_cv(model, *, test_subj_ids, labeling_scheme, dataset_builder, seglen, params, max_epochs=max_epochs, min_epochs=min_epochs):
+def leave_subjects_out_cv(model, *, test_subj_ids, labeling_scheme, dataset_builder, seglen, max_epochs=max_epochs, min_epochs=min_epochs):
     print("Test subjects: ", test_subj_ids)
 
     train, test = dataset_builder.build_deep_datasets_train_test(
-        seglen=seglen, insert_ch_dim=False, test_subj_ids=test_subj_ids, device=device, oversample=True)
+        insert_ch_dim=False, test_subj_ids=test_subj_ids, device=device, oversample=True, mode=mode)
+    
+    if len(test) == 0:
+        return None
     
     num_classes = labeling_scheme.get_num_classes()
-    model = EEGNet(num_classes=num_classes, dropout=params["dropout"])
+    model = EEGNet(num_classes=num_classes, dropout=dropout)
     model.to(device)
 
     return train_model(
-        model, train, test, max_epochs=max_epochs, learning_rate=params["learning_rate"],
-        enable_profiling=False, batch_size=params["batch_size"], min_epochs=min_epochs, class_weights=params["class_weights"])
+        model, train, test, max_epochs=max_epochs, learning_rate=learning_rate, enable_profiling=False, batch_size=batch_size, min_epochs=min_epochs, class_weights=class_weights, l1_lambda=l1_lambda)
     
 def gen_conf_matrix(all_targets, all_predictions, labeling_scheme: LabelingScheme):
     uniq_labels_names = [labeling_scheme.get_label_name(i) for i in labeling_scheme.get_possible_labels()]
@@ -341,13 +314,8 @@ if __name__ == "__main__":
 
     # Build dataset
     labeling_scheme = LabelingScheme(DaspsLabeling.HAM, merge_control=True)
-    builder = DatasetBuilder(labeling_scheme)
+    builder = DatasetBuilder(labeling_scheme, seglen=seglen)
 
-    params = seglen_to_params.get(seglen)
-
-    if params is None:
-        raise ValueError(f"No parameters defined for seglen: {seglen}")
-    
     test_losses = []
     all_predictions = []
     all_targets = []
@@ -358,8 +326,12 @@ if __name__ == "__main__":
     for test_subjs in val_splits:
         seed()
 
-        (_test_loss, _all_predictions, _all_targets, _label_accuracies), _test_accuracies = leave_subjects_out_cv(EEGNet, test_subj_ids=test_subjs, labeling_scheme=labeling_scheme,
-            dataset_builder=builder, seglen=seglen, params=params)
+        ret = leave_subjects_out_cv(EEGNet, test_subj_ids=test_subjs, labeling_scheme=labeling_scheme, dataset_builder=builder, seglen=seglen)
+
+        if ret is None:
+            continue
+
+        (_test_loss, _all_predictions, _all_targets, _label_accuracies), _test_accuracies = ret
         
         test_losses.append(_test_loss)
         all_predictions.extend(_all_predictions)
@@ -408,7 +380,7 @@ if __name__ == "__main__":
         print(f"Group {group}: {accuracy:.2f}")
 
     # Print class weights
-    if params["class_weights"] is not None:
-        print("Class weights: ", params["class_weights"])
+    if class_weights is not None:
+        print("Class weights: ", class_weights)
 
     print("Script execution finished.")

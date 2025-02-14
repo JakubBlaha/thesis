@@ -205,45 +205,30 @@ def normalize_eeg(data):
     return normalized_data
 
 
-class BaseDatasetBuilder:
-    def _drop_redundant_columns(self, df: pd.DataFrame) -> pd.DataFrame:
-        return df.drop(columns=['dataset', 'ham', 'sam',
-                                'stai', 'subject'])
-
-    def _get_seglen_df(self, seglen: int) -> pd.DataFrame:
-        path = get_feats_csv_path(seglen)
-
-        df = pd.read_csv(path)
-
-        # Remove absolute power features
-        # df = df.loc[:, ~df.columns.str.startswith('abs_pow_')]
-
-        return df
-
-
-class DatasetBuilder(BaseDatasetBuilder):
+class DatasetBuilder:
     _feat_names: list[str] = []
     _feat_domain_prefix = ['time', 'abs_pow', 'rel_pow', 'conn', 'ai']
 
-    def __init__(self, labeling_scheme: LabelingScheme) -> None:
+    def __init__(self, labeling_scheme: LabelingScheme, seglen: int) -> None:
         self._labeling_scheme = labeling_scheme
+        self.seglen = seglen
 
+    def _drop_redundant_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        return df.drop(columns=['dataset', 'ham', 'sam', 'stai', 'subject'])
 
-
-    def build_dataset_df(self, seglen: int, mode="both",
+    def build_dataset_df(self, mode="both",
                          domains:
                          list[str] | None = None,
                          p_val_thresh=0.05) -> pd.DataFrame:
-        
         assert False, "Merge control labels after oversample"
 
         if domains is None:
             domains = ["time", "rel_pow", "conn", "ai"]
 
-        print("Building dataset for seglen:", seglen, "mode:", mode,
+        print("Building dataset for seglen:", self.seglen, "mode:", mode,
               "domains:", domains, "p_val_thresh:", p_val_thresh)
 
-        df = self._get_seglen_df(seglen)
+        df = self._get_seglen_df()
         df = self._label_rows(df)
         df = self._keep_mode_rows(df, mode)
         df = self._drop_redundant_columns(df)
@@ -376,9 +361,9 @@ class DatasetBuilder(BaseDatasetBuilder):
 
         raise ValueError(f'Invalid SAD severity: {severity}')
     
-    def _get_segment_files(self, seglen: int):
+    def _get_segment_files(self):
         clean_segdir_path = os.path.join(
-            script_path, f'../data/segmented/{seglen}s/clean')
+            script_path, f'../data/segmented/{self.seglen}s/clean')
         files = glob.glob(f'{clean_segdir_path}/*-epo.fif')
         files = sorted(files)
 
@@ -387,16 +372,16 @@ class DatasetBuilder(BaseDatasetBuilder):
     def _get_subj_id_from_path(self, path: str) -> int:
         return int(os.path.basename(path).strip('-epo.fif').strip('S'))
 
-    def get_subj_ids(self, seglen: int) -> list[int]:
-        files = self._get_segment_files(seglen)
+    def get_subj_ids(self) -> list[int]:
+        files = self._get_segment_files()
         subj_ids = [self._get_subj_id_from_path(f) for f in files]
 
         return subj_ids
 
     def build_deep_datasets_train_test(
-            self, *, seglen: int, insert_ch_dim: bool, test_subj_ids: list[int], oversample=True,
-            device=None):
-        files = self._get_segment_files(seglen)
+            self, *, insert_ch_dim: bool, test_subj_ids: list[int], oversample=True,
+            device=None, mode='both'):
+        files = self._get_segment_files()
 
         data = []
         labels = []
@@ -408,9 +393,16 @@ class DatasetBuilder(BaseDatasetBuilder):
             for index, epoch in enumerate(epochs):
                 metadata = epochs.metadata.iloc[index]
 
-                if metadata['dataset'] == 'SAD':
+                dataset = metadata['dataset']
+
+                if mode == 'dasps' and dataset != 'dasps':
+                    continue
+                elif mode == 'sad' and dataset != 'SAD':
+                    continue
+
+                if dataset == 'SAD':
                     label = self._get_sad_label(metadata)
-                elif metadata['dataset'] == 'dasps':
+                elif dataset == 'dasps':
                     label = self._get_dasps_label(metadata)
                 else:
                     raise ValueError(f'Invalid dataset: {metadata["dataset"]}')
@@ -495,8 +487,8 @@ if __name__ == "__main__":
 
     # Deep dataset builder
     labeling_scheme = LabelingScheme(DaspsLabeling.HAM, merge_control=True)
-    builder = DatasetBuilder(labeling_scheme)
+    builder = DatasetBuilder(labeling_scheme, seglen=3)
 
-    train, test = builder.build_deep_datasets_train_test(seglen=3, insert_ch_dim=False, test_subj_ids=[1, 2, 3, 102, 103, 104, 401, 403, 405])
+    train, test = builder.build_deep_datasets_train_test(insert_ch_dim=False, test_subj_ids=[1, 2, 3, 102, 103, 104, 401, 403, 405])
 
 # %%
