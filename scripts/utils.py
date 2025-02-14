@@ -28,11 +28,6 @@ class DatasetLabel(Enum):
     LO_SAD = 3
 
 
-class DatasetEnum(Enum):
-    DASPS = 0
-    SAD = 1
-
-
 class LabelingScheme:
     def __init__(
             self, dasps_labeling: DaspsLabeling, *, lo_level_dasps=[0, 1],
@@ -209,15 +204,16 @@ class DatasetBuilder:
     _feat_names: list[str] = []
     _feat_domain_prefix = ['time', 'abs_pow', 'rel_pow', 'conn', 'ai']
 
-    def __init__(self, labeling_scheme: LabelingScheme, seglen: int) -> None:
+    def __init__(self, labeling_scheme: LabelingScheme, seglen: int, mode="both") -> None:
         self._labeling_scheme = labeling_scheme
         self.seglen = seglen
         self._preloaded_data = None
+        self.mode = mode
 
     def _drop_redundant_columns(self, df: pd.DataFrame) -> pd.DataFrame:
         return df.drop(columns=['dataset', 'ham', 'sam', 'stai', 'subject'])
 
-    def build_dataset_df(self, mode="both",
+    def build_dataset_df(self,
                          domains:
                          list[str] | None = None,
                          p_val_thresh=0.05) -> pd.DataFrame:
@@ -226,12 +222,12 @@ class DatasetBuilder:
         if domains is None:
             domains = ["time", "rel_pow", "conn", "ai"]
 
-        print("Building dataset for seglen:", self.seglen, "mode:", mode,
+        print("Building dataset for seglen:", self.seglen, "mode:", self.mode,
               "domains:", domains, "p_val_thresh:", p_val_thresh)
 
         df = self._get_seglen_df()
         df = self._label_rows(df)
-        df = self._keep_mode_rows(df, mode)
+        df = self._keep_mode_rows(df, self.mode)
         df = self._drop_redundant_columns(df)
         df = self._keep_feat_cols(df, domains)
         df = self._keep_significant_cols(df, p_val_thresh)
@@ -379,7 +375,7 @@ class DatasetBuilder:
 
         return subj_ids
 
-    def preload_epochs(self, mode='both'):
+    def preload_epochs(self):
         """Preloads all epochs into memory."""
         if self._preloaded_data is not None:
             print("Epochs already preloaded. Skipping preload.")
@@ -397,9 +393,9 @@ class DatasetBuilder:
                 metadata = epochs.metadata.iloc[index]
                 dataset = metadata['dataset']
 
-                if mode == 'dasps' and dataset != 'dasps':
+                if self.mode == 'dasps' and dataset != 'dasps':
                     continue
-                elif mode == 'sad' and dataset != 'SAD':
+                elif self.mode == 'sad' and dataset != 'SAD':
                     continue
 
                 if dataset == 'SAD':
@@ -421,9 +417,9 @@ class DatasetBuilder:
 
     def build_deep_datasets_train_test(
             self, *, insert_ch_dim: bool, test_subj_ids: list[int], oversample=True,
-            device=None, mode='both'):
+            device=None):
         if self._preloaded_data is None:
-            self.preload_epochs(mode=mode)
+            self.preload_epochs()
 
         data = self._preloaded_data['data']
         labels = self._preloaded_data['labels']

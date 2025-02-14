@@ -248,12 +248,12 @@ def plot_training_results(train_losses, val_losses, train_acc, test_acc):
     plt.show()
 
 # Global variables for parameters
-mode = "both"
+mode = "sad"
 learning_rate = 0.00001
 batch_size = 16
 dropout = 0.4
-# class_weights = [1.3, 1, 1.3]
 class_weights = [1, 1, 1.3]
+class_weights = None
 l1_lambda = 0.0000
 seglen = 3
 
@@ -280,13 +280,13 @@ val_splits = [[i] for i in all_subj_ids]
 # val_splits = val_splits[:1]
 # val_splits = [[i] for i in [4, 5, 7, 9, 10, 14, 15, 18, 23, 20, 108, 118, 402, 405, 413]]
 # val_splits = [[4, 5, 7, 9, 10, 14, 15, 18, 23, 20, 108, 118, 402, 405, 413]]
-# val_splits = [[1]]
+val_splits = [[101]]
 
-def leave_subjects_out_cv(model, *, test_subj_ids, labeling_scheme, dataset_builder, seglen, max_epochs=max_epochs, min_epochs=min_epochs):
+def leave_subjects_out_cv(model, *, test_subj_ids, labeling_scheme, dataset_builder: DatasetBuilder, max_epochs=max_epochs, min_epochs=min_epochs):
     print("Test subjects: ", test_subj_ids)
 
     train, test = dataset_builder.build_deep_datasets_train_test(
-        insert_ch_dim=False, test_subj_ids=test_subj_ids, device=device, oversample=True, mode=mode)
+        insert_ch_dim=False, test_subj_ids=test_subj_ids, device=device, oversample=True)
     
     if len(test) == 0:
         return None
@@ -314,7 +314,7 @@ if __name__ == "__main__":
 
     # Build dataset
     labeling_scheme = LabelingScheme(DaspsLabeling.HAM, merge_control=True)
-    builder = DatasetBuilder(labeling_scheme, seglen=seglen)
+    builder = DatasetBuilder(labeling_scheme, seglen=seglen, mode=mode)
 
     test_losses = []
     all_predictions = []
@@ -326,7 +326,7 @@ if __name__ == "__main__":
     for test_subjs in val_splits:
         seed()
 
-        ret = leave_subjects_out_cv(EEGNet, test_subj_ids=test_subjs, labeling_scheme=labeling_scheme, dataset_builder=builder, seglen=seglen)
+        ret = leave_subjects_out_cv(EEGNet, test_subj_ids=test_subjs, labeling_scheme=labeling_scheme, dataset_builder=builder)
 
         if ret is None:
             continue
