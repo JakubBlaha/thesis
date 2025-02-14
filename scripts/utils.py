@@ -212,6 +212,7 @@ class DatasetBuilder:
     def __init__(self, labeling_scheme: LabelingScheme, seglen: int) -> None:
         self._labeling_scheme = labeling_scheme
         self.seglen = seglen
+        self._preloaded_data = None
 
     def _drop_redundant_columns(self, df: pd.DataFrame) -> pd.DataFrame:
         return df.drop(columns=['dataset', 'ham', 'sam', 'stai', 'subject'])
@@ -378,21 +379,22 @@ class DatasetBuilder:
 
         return subj_ids
 
-    def build_deep_datasets_train_test(
-            self, *, insert_ch_dim: bool, test_subj_ids: list[int], oversample=True,
-            device=None, mode='both'):
-        files = self._get_segment_files()
+    def preload_epochs(self, mode='both'):
+        """Preloads all epochs into memory."""
+        if self._preloaded_data is not None:
+            print("Epochs already preloaded. Skipping preload.")
+            return
 
-        data = []
-        labels = []
-        groups = []
+        files = self._get_segment_files()
+        all_data = []
+        all_labels = []
+        all_groups = []
 
         for f in files:
             epochs = mne.read_epochs(f, preload=True, verbose=False)
 
             for index, epoch in enumerate(epochs):
                 metadata = epochs.metadata.iloc[index]
-
                 dataset = metadata['dataset']
 
                 if mode == 'dasps' and dataset != 'dasps':
@@ -407,13 +409,25 @@ class DatasetBuilder:
                 else:
                     raise ValueError(f'Invalid dataset: {metadata["dataset"]}')
 
-                data.append(epoch)
-                labels.append(label.value)
-                groups.append(metadata['subject'])
+                all_data.append(epoch)
+                all_labels.append(label.value)
+                all_groups.append(metadata['subject'])
 
-        data = np.array(data)
-        labels = np.array(labels)
-        groups = np.array(groups)
+        self._preloaded_data = {
+            'data': np.array(all_data),
+            'labels': np.array(all_labels),
+            'groups': np.array(all_groups)
+        }
+
+    def build_deep_datasets_train_test(
+            self, *, insert_ch_dim: bool, test_subj_ids: list[int], oversample=True,
+            device=None, mode='both'):
+        if self._preloaded_data is None:
+            self.preload_epochs(mode=mode)
+
+        data = self._preloaded_data['data']
+        labels = self._preloaded_data['labels']
+        groups = self._preloaded_data['groups']
 
         test_mask = np.isin(groups, test_subj_ids)
 
