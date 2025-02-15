@@ -21,13 +21,6 @@ class DaspsLabeling(Enum):
     SAM = 1
 
 
-class DatasetLabel(Enum):
-    HI_GAD = 0
-    HI_SAD = 1
-    LO_GAD = 2
-    LO_SAD = 3
-
-
 class LabelingScheme:
     def __init__(
             self, dasps_labeling: DaspsLabeling, *, lo_level_dasps=[0, 1],
@@ -45,28 +38,6 @@ class LabelingScheme:
         self.hi_level_sad = hi_level_sad
         self.merge_control = merge_control
 
-    def get_num_classes(self):
-        if self.merge_control:
-            return 3
-        else:
-            return 4
-        
-    def get_label_name(self, label: int):
-        if label in [DatasetLabel.HI_GAD.value, DatasetLabel.HI_SAD.value]:
-            return DatasetLabel(label).name
-        elif label in [DatasetLabel.LO_GAD.value, DatasetLabel.LO_SAD.value] and not self.merge_control:
-            return DatasetLabel(label).name
-        elif label == DatasetLabel.LO_GAD.value and self.merge_control:
-            return "CONTROL"
-        else:
-            raise ValueError(f'Invalid label: {label}')
-
-    def get_possible_labels(self):
-        if self.merge_control:
-            return [DatasetLabel.HI_GAD.value, DatasetLabel.HI_SAD.value, DatasetLabel.LO_GAD.value]
-        else:
-            return [DatasetLabel.HI_GAD.value, DatasetLabel.HI_SAD.value, DatasetLabel.LO_GAD.value, DatasetLabel.LO_SAD.value]
-
 
 def get_extracted_seglens():
     paths = glob.glob(os.path.join(features_dir, 'features_*s.csv'))
@@ -82,111 +53,33 @@ def get_feats_csv_path(seglen: int):
     return os.path.join(features_dir, f'features_{seglen}s.csv')
 
 
-# def custom_random_oversample(features, labels, groups):
-#     # Replace LO_GAD and LO_SAD labels with CONTROL
-#     labels[labels == DatasetLabel.LO_GAD.value] = DatasetLabel.CONTROL.value
-#     labels[labels == DatasetLabel.LO_SAD.value] = DatasetLabel.CONTROL.value
+def random_oversample(features, labels, groups, oversample_labels=None):
+    """Oversample the minority classs to balance the dataset."""
 
-#     label_counts = np.bincount(labels)
-#     max_label_count = np.max(label_counts)
+    if oversample_labels is None:
+        oversample_labels = np.unique(labels)
 
-#     print("Label counts before oversampling:")
-#     for label, count in enumerate(label_counts):
-#         print(f"Label {label} - {DatasetLabel(label).name}: {count}")
+    label_counts = np.bincount(labels[np.isin(labels, oversample_labels)])
 
-#     for label in np.unique(labels):
-#         n_to_oversample = max_label_count - label_counts[label]
+    print(label_counts)
 
-#         if n_to_oversample == 0:
-#             continue
+    max_label_count = np.max(label_counts)
 
-#         # Get indices of samples with given label
-#         label_indices = np.where(labels == label)[0]
+    for label in oversample_labels:
+        n_to_oversample = max_label_count - label_counts[label]
 
-#         # Randomly select samples to oversample
-#         new_samples = np.random.choice(label_indices, n_to_oversample)
+        if n_to_oversample == 0:
+            continue
 
-#         features = np.vstack([features, features[new_samples]])
-#         labels = np.hstack([labels, labels[new_samples]])
-#         groups = np.hstack([groups, groups[new_samples]])
+        # Get indices of samples with given label
+        label_indices = np.where(labels == label)[0]
 
-#     return features, labels, groups
+        # Randomly select samples to oversample
+        new_samples = np.random.choice(label_indices, n_to_oversample)
 
-
-def custom_random_oversample(features, labels, groups):
-    label_counts = np.bincount(labels)
-    label_counts_before_oversample = label_counts.copy()
-
-    # Balance LO_GAD and LO_SAD
-    lo_gad_count = label_counts[DatasetLabel.LO_GAD.value]
-    lo_sad_count = label_counts[DatasetLabel.LO_SAD.value]
-
-    if lo_gad_count > lo_sad_count:
-        label_to_oversample = DatasetLabel.LO_SAD.value
-        n_to_oversample = lo_gad_count - lo_sad_count
-    elif lo_sad_count > lo_gad_count:
-        label_to_oversample = DatasetLabel.LO_GAD.value
-        n_to_oversample = lo_sad_count - lo_gad_count
-    else:
-        label_to_oversample = None
-        n_to_oversample = 0
-
-    if label_to_oversample is not None:
-        label_indices = np.where(labels == label_to_oversample)[0]
-        if len(label_indices) > 0:
-            new_samples = np.random.choice(label_indices, n_to_oversample)
-            features = np.vstack([features, features[new_samples]])
-            labels = np.hstack([labels, labels[new_samples]])
-            groups = np.hstack([groups, groups[new_samples]])
-        else:
-            print(f"Warning: No samples found for label {label_to_oversample}")
-
-    # Get new label counts after balancing LO_GAD and LO_SAD
-    label_counts = np.bincount(labels)
-    lo_gad_count = label_counts[DatasetLabel.LO_GAD.value]
-    lo_sad_count = label_counts[DatasetLabel.LO_SAD.value]
-    
-    # Calculate target count for HI_GAD and HI_SAD
-    target_count = lo_gad_count + lo_sad_count
-
-    # Oversample HI_GAD and HI_SAD to match target_count
-    for label in [DatasetLabel.HI_GAD.value, DatasetLabel.HI_SAD.value]:
-        label_count = label_counts[label]
-        n_to_oversample = target_count - label_count
-
-        if n_to_oversample > 0:
-            label_indices = np.where(labels == label)[0]
-            if len(label_indices) > 0:
-                new_samples = np.random.choice(label_indices, n_to_oversample)
-                features = np.vstack([features, features[new_samples]])
-                labels = np.hstack([labels, labels[new_samples]])
-                groups = np.hstack([groups, groups[new_samples]])
-            else:
-                print(f"Warning: No samples found for label {label}")
-
-    # Create a bar chart of the label distribution
-    label_counts_after_oversample = np.bincount(labels)
-
-    # Create a side-by-side bar chart of the label distribution before and after oversampling
-    # label_names = [DatasetLabel(i).name for i in range(len(label_counts))]
-
-    # x = np.arange(len(label_names))  # the label locations
-    # width = 0.35  # the width of the bars
-
-    # fig, ax = plt.subplots(figsize=(12, 6))
-    # rects1 = ax.bar(x - width/2, label_counts_before_oversample, width, label='Before Oversampling')
-    # rects2 = ax.bar(x + width/2, label_counts_after_oversample, width, label='After Oversampling')
-
-    # # Add some text for labels, title and custom x-axis tick labels, etc.
-    # ax.set_xlabel('Labels')
-    # ax.set_ylabel('Number of samples')
-    # ax.set_title('Label Distribution Before and After Oversampling')
-    # ax.set_xticks(x, label_names)
-    # plt.xticks(rotation=45, ha="right")
-    # ax.legend()
-
-    # fig.tight_layout()
-    # plt.show()
+        features = np.vstack([features, features[new_samples]])
+        labels = np.hstack([labels, labels[new_samples]])
+        groups = np.hstack([groups, groups[new_samples]])
 
     return features, labels, groups
 
@@ -205,6 +98,8 @@ class DatasetBuilder:
     _feat_domain_prefix = ['time', 'abs_pow', 'rel_pow', 'conn', 'ai']
 
     def __init__(self, labeling_scheme: LabelingScheme, seglen: int, mode="both") -> None:
+        self._validate_mode(mode)
+
         self._labeling_scheme = labeling_scheme
         self.seglen = seglen
         self._preloaded_data = None
@@ -264,10 +159,10 @@ class DatasetBuilder:
 
     def _keep_significant_cols(
             self, df: pd.DataFrame, p_val_thresh: float) -> pd.DataFrame:
-        low_gad = df[df['label'] == DatasetLabel.LO_GAD.value].copy()
-        gad = df[df['label'] == DatasetLabel.HI_GAD.value].copy()
-        low_sad = df[df['label'] == DatasetLabel.LO_SAD.value].copy()
-        sad = df[df['label'] == DatasetLabel.HI_SAD.value].copy()
+        low_gad = df[df['label'] == "LO_GAD"].copy()
+        gad = df[df['label'] == "HI_GAD"].copy()
+        low_sad = df[df['label'] == "LO_SAD"].copy()
+        sad = df[df['label'] == "HI_SAD"].copy()
 
         low_anxiety = pd.concat([low_gad, low_sad])
 
@@ -293,12 +188,15 @@ class DatasetBuilder:
                 df = df.drop(columns=[col])
 
         return df
-
-    def _keep_mode_rows(self, df: pd.DataFrame, mode: str) -> pd.DataFrame:
+    
+    def _validate_mode(self, mode: str):
         _valid_modes = ["both", "dasps", "sad"]
 
         assert mode in _valid_modes, "mode must be one of " + str(
             _valid_modes)
+
+    def _keep_mode_rows(self, df: pd.DataFrame, mode: str) -> pd.DataFrame:
+        self._validate_mode(mode)
 
         if mode == "both":
             return df
@@ -325,36 +223,36 @@ class DatasetBuilder:
             else:
                 raise ValueError(f'Invalid dataset {dataset}')
 
-            df.at[i, 'label'] = label.value
+            df.at[i, 'label'] = label
 
         return df
 
-    def _get_dasps_label(self, row: pd.Series) -> DatasetLabel:
+    def _get_dasps_label(self, row: pd.Series) -> str:
         if self._labeling_scheme.dasps_labeling.value == DaspsLabeling.HAM.value:
             if row['ham'] in self._labeling_scheme.lo_level_dasps:
-                return DatasetLabel.LO_GAD
+                return "LO_GAD"
             elif row['ham'] in self._labeling_scheme.hi_level_dasps:
-                return DatasetLabel.HI_GAD
+                return "HI_GAD"
             else:
                 raise ValueError(f'Invalid HAM severity: {row["ham"]}')
 
         elif self._labeling_scheme.dasps_labeling.value == DaspsLabeling.SAM.value:
             if row['sam'] in self._labeling_scheme.lo_level_dasps:
-                return DatasetLabel.LO_GAD
+                return "LO_GAD"
             elif row['sam'] in self._labeling_scheme.hi_level_dasps:
-                return DatasetLabel.HI_GAD
+                return "HI_GAD"
             else:
                 raise ValueError(f'Invalid SAM severity: {row["sam"]}')
 
         raise ValueError('Invalid labeling scheme')
 
-    def _get_sad_label(self, row: pd.Series) -> DatasetLabel:
+    def _get_sad_label(self, row: pd.Series) -> str:
         severity = row['stai']
 
         if severity in self._labeling_scheme.lo_level_sad:
-            return DatasetLabel.LO_SAD
+            return "LO_SAD"
         elif severity in self._labeling_scheme.hi_level_sad:
-            return DatasetLabel.HI_SAD
+            return "HI_SAD"
 
         raise ValueError(f'Invalid SAD severity: {severity}')
     
@@ -406,7 +304,7 @@ class DatasetBuilder:
                     raise ValueError(f'Invalid dataset: {metadata["dataset"]}')
 
                 all_data.append(epoch)
-                all_labels.append(label.value)
+                all_labels.append(label)
                 all_groups.append(metadata['subject'])
 
         self._preloaded_data = {
@@ -414,6 +312,14 @@ class DatasetBuilder:
             'labels': np.array(all_labels),
             'groups': np.array(all_groups)
         }
+
+    def _output_label_counts(self, labels, label_dict=None):
+        label_counts = np.bincount(labels)
+
+        print("Label counts:")
+        for label, count in enumerate(label_counts):
+            label_name = label_dict[label] if label_dict is not None else label
+            print(f"{label_name}: {count}")
 
     def build_deep_datasets_train_test(
             self, *, insert_ch_dim: bool, test_subj_ids: list[int], oversample=True,
@@ -435,34 +341,46 @@ class DatasetBuilder:
 
         train_groups = groups[~test_mask]
 
+        # Encode labels
+        label_to_int = {label: i for i, label in enumerate(np.unique(train_labels))}
+        int_to_label = {i: label for label, i in label_to_int.items()}
+
+        train_labels = np.array([label_to_int[label] for label in train_labels])
+        test_labels = np.array([label_to_int[label] for label in test_labels])
+
+        # self._output_label_counts(train_labels, int_to_label)
+
         if oversample:
-            train_data, train_labels, train_groups = custom_random_oversample(
+            if self._labeling_scheme.merge_control and self.mode == "both":
+                train_data, train_labels, train_groups = random_oversample(
+                    train_data, train_labels, train_groups, oversample_labels=[label_to_int["LO_GAD"], label_to_int["LO_SAD"]])
+            
+            # self._output_label_counts(train_labels, int_to_label)
+
+            train_data, train_labels, train_groups = random_oversample(
                 train_data, train_labels, train_groups)
-
-        if self._labeling_scheme.merge_control:
-            test_labels[test_labels == DatasetLabel.LO_SAD.value] = DatasetLabel.LO_GAD.value
-            train_labels[train_labels == DatasetLabel.LO_SAD.value] = DatasetLabel.LO_GAD.value
-
-        # Count values
-        train_label_counts = np.bincount(train_labels)
-        print("Train label counts:")
-        for label, count in enumerate(train_label_counts):
-            print(f"Label {label} - {DatasetLabel(label).name}: {count}")
-
-        print()
-
-        test_label_counts = np.bincount(test_labels)
-        print("Test label counts:")
-        for label, count in enumerate(test_label_counts):
-            print(f"Label {label} - {DatasetLabel(label).name}: {count}")
 
         train_data = normalize_eeg(train_data).astype(np.float32)
         test_data = normalize_eeg(test_data).astype(np.float32)
+
+        if self._labeling_scheme.merge_control and self.mode == "both":
+            int_lo_gad = label_to_int["LO_GAD"]
+            int_lo_sad = label_to_int["LO_SAD"]
+
+            int_control = min(int_lo_gad, int_lo_sad)
+            int_to_label[int_control] = "CONTROL"
+
+            train_labels[(train_labels == int_lo_gad) | (train_labels == int_lo_sad)] = int_control
+            test_labels[(test_labels == int_lo_gad) | (test_labels == int_lo_sad)] = int_control
+
+        # self._output_label_counts(train_labels, int_to_label)
 
         train_torch_dataset = TorchDeepDataset(
             train_data, train_labels, insert_ch_dim=insert_ch_dim, device=device)
         test_torch_dataset = TorchDeepDataset(
             test_data, test_labels, insert_ch_dim=insert_ch_dim, device=device)
+        
+        self.last_int_to_label = int_to_label
 
         return train_torch_dataset, test_torch_dataset
 
@@ -499,6 +417,6 @@ if __name__ == "__main__":
     labeling_scheme = LabelingScheme(DaspsLabeling.HAM, merge_control=True)
     builder = DatasetBuilder(labeling_scheme, seglen=3)
 
-    train, test = builder.build_deep_datasets_train_test(insert_ch_dim=False, test_subj_ids=[1, 2, 3, 102, 103, 104, 401, 403, 405])
+    train, test = builder.build_deep_datasets_train_test(insert_ch_dim=False, test_subj_ids=[101, 102, 103], oversample=True)
 
 # %%

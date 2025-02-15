@@ -248,14 +248,15 @@ def plot_training_results(train_losses, val_losses, train_acc, test_acc):
     plt.show()
 
 # Global variables for parameters
-mode = "sad"
+mode = "dasps"
 learning_rate = 0.00001
 batch_size = 16
 dropout = 0.4
-class_weights = [1, 1, 1.3]
+# class_weights = [1, 1, 1.3]
 class_weights = None
 l1_lambda = 0.0000
 seglen = 3
+merge_control = True
 
 device = None
 use_gpu = True
@@ -280,7 +281,7 @@ val_splits = [[i] for i in all_subj_ids]
 # val_splits = val_splits[:1]
 # val_splits = [[i] for i in [4, 5, 7, 9, 10, 14, 15, 18, 23, 20, 108, 118, 402, 405, 413]]
 # val_splits = [[4, 5, 7, 9, 10, 14, 15, 18, 23, 20, 108, 118, 402, 405, 413]]
-val_splits = [[101]]
+# val_splits = [[101]]
 
 def leave_subjects_out_cv(model, *, test_subj_ids, labeling_scheme, dataset_builder: DatasetBuilder, max_epochs=max_epochs, min_epochs=min_epochs):
     print("Test subjects: ", test_subj_ids)
@@ -291,16 +292,16 @@ def leave_subjects_out_cv(model, *, test_subj_ids, labeling_scheme, dataset_buil
     if len(test) == 0:
         return None
     
-    num_classes = labeling_scheme.get_num_classes()
+    num_classes = len(builder.last_int_to_label.keys())
     model = EEGNet(num_classes=num_classes, dropout=dropout)
     model.to(device)
 
     return train_model(
         model, train, test, max_epochs=max_epochs, learning_rate=learning_rate, enable_profiling=False, batch_size=batch_size, min_epochs=min_epochs, class_weights=class_weights, l1_lambda=l1_lambda)
     
-def gen_conf_matrix(all_targets, all_predictions, labeling_scheme: LabelingScheme):
-    uniq_labels_names = [labeling_scheme.get_label_name(i) for i in labeling_scheme.get_possible_labels()]
+def gen_conf_matrix(all_targets, all_predictions, int_to_label: dict):
     conf_matrix = confusion_matrix(all_targets, all_predictions)
+    uniq_labels_names = [int_to_label[i] for i in sorted(int_to_label.keys())]
 
     plt.figure(figsize=(8, 6))
     sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues", xticklabels=uniq_labels_names, yticklabels=uniq_labels_names)
@@ -313,7 +314,7 @@ if __name__ == "__main__":
     setup_device()
 
     # Build dataset
-    labeling_scheme = LabelingScheme(DaspsLabeling.HAM, merge_control=True)
+    labeling_scheme = LabelingScheme(DaspsLabeling.HAM, merge_control=merge_control)
     builder = DatasetBuilder(labeling_scheme, seglen=seglen, mode=mode)
 
     test_losses = []
@@ -367,10 +368,10 @@ if __name__ == "__main__":
     print(f"Max Best Epoch: {max_best_epoch}")
 
     # Conf matrix
-    gen_conf_matrix(all_targets, all_predictions, labeling_scheme)
+    gen_conf_matrix(all_targets, all_predictions, builder.last_int_to_label)
 
     # Print label accuracies
-    all_accuracies_mean = {labeling_scheme.get_label_name(k): v for k, v in avg_all_accuracies.items()}
+    all_accuracies_mean = {builder.last_int_to_label[k]: v for k, v in avg_all_accuracies.items()}
     table_acc_mean = tabulate(all_accuracies_mean.items(), headers=['Label', 'Mean Accuracy'])
     print(table_acc_mean)
 

@@ -12,7 +12,7 @@ from sklearn import svm
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.pipeline import Pipeline
 
-from utils import DatasetBuilder, LabelingScheme, DaspsLabeling, custom_random_oversample
+from utils import DatasetBuilder, LabelingScheme, DaspsLabeling, random_oversample
 from tabulate import tabulate
 
 GRID = {
@@ -151,7 +151,7 @@ def train_models():
     features = df.to_numpy()
 
     if oversample:
-        features, labels, groups = custom_random_oversample(
+        features, labels, groups = random_oversample(
             features, labels, groups)
 
     n_feats = features.shape[1]
