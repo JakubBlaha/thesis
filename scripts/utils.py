@@ -1,6 +1,7 @@
 # %%
 import mne
 import numpy as np
+from sklearn.calibration import LabelEncoder
 from torch.utils.data import Dataset
 import pandas as pd
 import os
@@ -16,27 +17,6 @@ from constants import features_dir
 script_path = os.path.dirname(os.path.realpath(__file__))
 
 
-class DaspsLabeling(Enum):
-    HAM = 0
-    SAM = 1
-
-
-class LabelingScheme:
-    def __init__(
-            self, dasps_labeling: DaspsLabeling, *, lo_level_dasps=[0, 1],
-            hi_level_dasps=[2, 3],
-            lo_level_sad=[0, 1],
-            hi_level_sad=[2, 3],
-            merge_control=True) -> None:
-        # Make sure low and hi levels do not overlap
-        assert len(set(lo_level_dasps) & set(hi_level_dasps)) == 0
-
-        self.dasps_labeling = dasps_labeling
-        self.lo_level_dasps = lo_level_dasps
-        self.hi_level_dasps = hi_level_dasps
-        self.lo_level_sad = lo_level_sad
-        self.hi_level_sad = hi_level_sad
-        self.merge_control = merge_control
 
 
 def get_extracted_seglens():
@@ -93,27 +73,55 @@ def normalize_eeg(data):
     return normalized_data
 
 
+class DaspsLabeling(Enum):
+    HAM = 0
+    SAM = 1
+
+
+class LabelingScheme:
+    def __init__(
+            self, dasps_labeling: DaspsLabeling, *, lo_level_dasps=[0, 1],
+            hi_level_dasps=[2, 3],
+            lo_level_sad=[0, 1],
+            hi_level_sad=[2, 3],
+            merge_control=True) -> None:
+        # Make sure low and hi levels do not overlap
+        assert len(set(lo_level_dasps) & set(hi_level_dasps)) == 0
+
+        self.dasps_labeling = dasps_labeling
+        self.lo_level_dasps = lo_level_dasps
+        self.hi_level_dasps = hi_level_dasps
+        self.lo_level_sad = lo_level_sad
+        self.hi_level_sad = hi_level_sad
+        self.merge_control = merge_control
+
+
 class DatasetBuilder:
     _feat_names: list[str] = []
     _feat_domain_prefix = ['time', 'abs_pow', 'rel_pow', 'conn', 'ai']
 
-    def __init__(self, labeling_scheme: LabelingScheme, seglen: int, mode="both") -> None:
+    def __init__(self, labeling_scheme: LabelingScheme, seglen: int, mode="both", oversample=True) -> None:
         self._validate_mode(mode)
 
         self._labeling_scheme = labeling_scheme
         self.seglen = seglen
         self._preloaded_data = None
         self.mode = mode
+        self.oversample = oversample
 
     def _drop_redundant_columns(self, df: pd.DataFrame) -> pd.DataFrame:
         return df.drop(columns=['dataset', 'ham', 'sam', 'stai', 'subject'])
+    
+    def _get_seglen_df(self) -> pd.DataFrame:
+        path = get_feats_csv_path(self.seglen)
+        df = pd.read_csv(path)
+
+        return df
 
     def build_dataset_df(self,
                          domains:
                          list[str] | None = None,
-                         p_val_thresh=0.05) -> pd.DataFrame:
-        assert False, "Merge control labels after oversample"
-
+                         p_val_thresh=None) -> pd.DataFrame:
         if domains is None:
             domains = ["time", "rel_pow", "conn", "ai"]
 
@@ -125,11 +133,33 @@ class DatasetBuilder:
         df = self._keep_mode_rows(df, self.mode)
         df = self._drop_redundant_columns(df)
         df = self._keep_feat_cols(df, domains)
-        df = self._keep_significant_cols(df, p_val_thresh)
+
+        if p_val_thresh is not None:
+            df = self._keep_significant_cols(df, p_val_thresh)
 
         self._feat_names = df.columns.tolist()[:-2]
 
         return df
+    
+    def build_dataset_feats_labels_groups_df(self, domains: list[str] | None = None, p_val_thresh=None):
+        df = self.build_dataset_df(domains, p_val_thresh)
+
+        group_encoder = LabelEncoder()
+        groups = group_encoder.fit_transform(df['uniq_subject_id'])
+
+        label_encoder = LabelEncoder()
+        labels = label_encoder.fit_transform(df['label'])
+
+        # Remove ID columns
+        df.drop(columns=['uniq_subject_id', 'label'], inplace=True)
+
+        features = df.to_numpy()
+
+        if self.oversample:
+            features, labels, groups = random_oversample(
+                features, labels, groups)
+
+        return features, labels, groups, df
 
     def get_feat_names(self):
         return self._feat_names
@@ -322,7 +352,7 @@ class DatasetBuilder:
             print(f"{label_name}: {count}")
 
     def build_deep_datasets_train_test(
-            self, *, insert_ch_dim: bool, test_subj_ids: list[int], oversample=True,
+            self, *, insert_ch_dim: bool, test_subj_ids: list[int],
             device=None):
         if self._preloaded_data is None:
             self.preload_epochs()
@@ -350,7 +380,7 @@ class DatasetBuilder:
 
         # self._output_label_counts(train_labels, int_to_label)
 
-        if oversample:
+        if self.oversample:
             if self._labeling_scheme.merge_control and self.mode == "both":
                 train_data, train_labels, train_groups = random_oversample(
                     train_data, train_labels, train_groups, oversample_labels=[label_to_int["LO_GAD"], label_to_int["LO_SAD"]])
@@ -405,18 +435,14 @@ class TorchDeepDataset(Dataset):
 
 if __name__ == "__main__":
     # Normal dataset builder
-    # labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
-    # builder = DatasetBuilder(labeling_scheme)
-
-    # df = builder.build_dataset_df(10)
-
-    # print(dasps.shape)
-    # print(sad.shape)
+    labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
+    builder = DatasetBuilder(labeling_scheme, seglen=10)
+    df = builder.build_dataset_df()
 
     # Deep dataset builder
     labeling_scheme = LabelingScheme(DaspsLabeling.HAM, merge_control=True)
     builder = DatasetBuilder(labeling_scheme, seglen=3)
 
-    train, test = builder.build_deep_datasets_train_test(insert_ch_dim=False, test_subj_ids=[101, 102, 103], oversample=True)
+    train, test = builder.build_deep_datasets_train_test(insert_ch_dim=False, test_subj_ids=[101, 102, 103])
 
 # %%

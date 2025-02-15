@@ -257,6 +257,7 @@ class_weights = None
 l1_lambda = 0.0000
 seglen = 3
 merge_control = True
+oversample = True
 
 device = None
 use_gpu = True
@@ -287,7 +288,7 @@ def leave_subjects_out_cv(model, *, test_subj_ids, labeling_scheme, dataset_buil
     print("Test subjects: ", test_subj_ids)
 
     train, test = dataset_builder.build_deep_datasets_train_test(
-        insert_ch_dim=False, test_subj_ids=test_subj_ids, device=device, oversample=True)
+        insert_ch_dim=False, test_subj_ids=test_subj_ids, device=device)
     
     if len(test) == 0:
         return None
@@ -315,7 +316,7 @@ if __name__ == "__main__":
 
     # Build dataset
     labeling_scheme = LabelingScheme(DaspsLabeling.HAM, merge_control=merge_control)
-    builder = DatasetBuilder(labeling_scheme, seglen=seglen, mode=mode)
+    builder = DatasetBuilder(labeling_scheme, seglen=seglen, mode=mode, oversample=oversample)
 
     test_losses = []
     all_predictions = []

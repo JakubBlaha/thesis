@@ -1,18 +1,15 @@
 # %%
-import numpy as np
-
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, StandardScaler
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import LeaveOneGroupOut, StratifiedKFold, cross_val_score, GridSearchCV
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
-from sklearn.preprocessing import LabelEncoder
 from sklearn import svm
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.pipeline import Pipeline
 
-from utils import DatasetBuilder, LabelingScheme, DaspsLabeling, random_oversample
+from utils import DatasetBuilder, LabelingScheme, DaspsLabeling
 from tabulate import tabulate
 
 GRID = {
@@ -96,7 +93,7 @@ GRID = {
 }
 
 # Classifier
-classif = "lda"
+classif = "svm-lin"
 
 # Segment length
 seglen = 10
@@ -116,7 +113,7 @@ dasps_labeling_scheme = "ham"
 # Cross validation: skf, logo
 cv = 'logo'
 
-verbosity = 0
+verbosity = 10
 
 
 def train_models():
@@ -125,34 +122,8 @@ def train_models():
     elif dasps_labeling_scheme == "sam":
         _labeling_scheme = LabelingScheme(DaspsLabeling.SAM)
 
-    builder = DatasetBuilder(_labeling_scheme)
-
-    df = builder.build_dataset_df(
-        seglen, mode=mode, domains=domains,
-        p_val_thresh=1)
-
-    print("Working with following features:")
-    print(*df.columns)
-
-    orig_label_counts = df['label'].value_counts()
-
-    group_encoder = LabelEncoder()
-    groups = group_encoder.fit_transform(df['uniq_subject_id'])
-
-    label_encoder = LabelEncoder()
-    labels = label_encoder.fit_transform(df['label'])
-
-    # print(df['label'].value_counts().plot(kind='bar'))
-    # plt.show()
-
-    # Remove ID columns
-    df.drop(columns=['uniq_subject_id', 'label'], inplace=True)
-
-    features = df.to_numpy()
-
-    if oversample:
-        features, labels, groups = random_oversample(
-            features, labels, groups)
+    builder = DatasetBuilder(_labeling_scheme, seglen, mode, oversample=oversample)
+    features, labels, groups, df = builder.build_dataset_feats_labels_groups_df(domains)
 
     n_feats = features.shape[1]
 
@@ -207,12 +178,8 @@ def train_models():
     scores = cross_val_score(
         best_estimator, features, labels, groups=groups, cv=_cv,
         verbose=verbosity, n_jobs=None)
-    # Output
-    print("Label counts:")
-    print(orig_label_counts)
 
-    print("Label counts after oversampling:")
-    print(np.bincount(labels))
+    # Output
 
     print("Searched parameters grid:")
     param_table = {
