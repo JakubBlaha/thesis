@@ -41,8 +41,6 @@ def random_oversample(features, labels, groups, oversample_labels=None):
 
     label_counts = np.bincount(labels[np.isin(labels, oversample_labels)])
 
-    print(label_counts)
-
     max_label_count = np.max(label_counts)
 
     for label in oversample_labels:
@@ -100,7 +98,7 @@ class DatasetBuilder:
     _feat_names: list[str] = []
     _feat_domain_prefix = ['time', 'abs_pow', 'rel_pow', 'conn', 'ai']
 
-    def __init__(self, labeling_scheme: LabelingScheme, seglen: int, mode="both", oversample=True) -> None:
+    def __init__(self, labeling_scheme: LabelingScheme, seglen: int, mode="both", oversample=True, debug=False) -> None:
         self._validate_mode(mode)
 
         self._labeling_scheme = labeling_scheme
@@ -108,6 +106,7 @@ class DatasetBuilder:
         self._preloaded_data = None
         self.mode = mode
         self.oversample = oversample
+        self.debug = debug
 
     def _drop_redundant_columns(self, df: pd.DataFrame) -> pd.DataFrame:
         return df.drop(columns=['dataset', 'ham', 'sam', 'stai', 'subject'])
@@ -154,6 +153,8 @@ class DatasetBuilder:
         df.drop(columns=['uniq_subject_id', 'label'], inplace=True)
 
         features = df.to_numpy()
+
+        # TODO this first needs to balance control classes
 
         if self.oversample:
             features, labels, groups = random_oversample(
@@ -359,6 +360,7 @@ class DatasetBuilder:
         for label, count in enumerate(label_counts):
             label_name = label_dict[label] if label_dict is not None else label
             print(f"{label_name}: {count}")
+        print()
 
     def build_deep_datasets_train_test(
             self, *, insert_ch_dim: bool, test_subj_ids: list[int],
@@ -369,6 +371,9 @@ class DatasetBuilder:
         data = self._preloaded_data['data']
         labels = self._preloaded_data['labels']
         groups = self._preloaded_data['groups']
+
+        if len(data) == 0:
+            raise ValueError("No epochs found. Make sure there is data to be loaded.")
 
         test_mask = np.isin(groups, test_subj_ids)
 
@@ -387,17 +392,15 @@ class DatasetBuilder:
         train_labels = np.array([label_to_int[label] for label in train_labels])
         test_labels = np.array([label_to_int[label] for label in test_labels])
 
-        # self._output_label_counts(train_labels, int_to_label)
+        if self.debug:
+            self._output_label_counts(train_labels, int_to_label)
 
-        if self.oversample:
-            if self._labeling_scheme.merge_control and self.mode == "both":
-                train_data, train_labels, train_groups = random_oversample(
-                    train_data, train_labels, train_groups, oversample_labels=[label_to_int["LO_GAD"], label_to_int["LO_SAD"]])
-            
-            # self._output_label_counts(train_labels, int_to_label)
-
+        if self.oversample and self._labeling_scheme.merge_control and self.mode == "both":
             train_data, train_labels, train_groups = random_oversample(
-                train_data, train_labels, train_groups)
+                train_data, train_labels, train_groups, oversample_labels=[label_to_int["LO_GAD"], label_to_int["LO_SAD"]])
+
+            if self.debug:
+                self._output_label_counts(train_labels, int_to_label)
 
         train_data = normalize_eeg(train_data).astype(np.float32)
         test_data = normalize_eeg(test_data).astype(np.float32)
@@ -409,10 +412,21 @@ class DatasetBuilder:
             int_control = min(int_lo_gad, int_lo_sad)
             int_to_label[int_control] = "CONTROL"
 
+            del int_to_label[3]
+
             train_labels[(train_labels == int_lo_gad) | (train_labels == int_lo_sad)] = int_control
             test_labels[(test_labels == int_lo_gad) | (test_labels == int_lo_sad)] = int_control
 
-        # self._output_label_counts(train_labels, int_to_label)
+            if self.debug:
+                self._output_label_counts(train_labels, int_to_label)
+
+        if self.oversample:
+            train_data, train_labels, train_groups = random_oversample(
+                train_data, train_labels, train_groups)
+
+        if self.debug:
+            self._output_label_counts(train_labels, int_to_label)
+            # print("Labels:", list(train_labels), test_labels)
 
         train_torch_dataset = TorchDeepDataset(
             train_data, train_labels, insert_ch_dim=insert_ch_dim, device=device)
@@ -450,7 +464,7 @@ if __name__ == "__main__":
 
     # Deep dataset builder
     labeling_scheme = LabelingScheme(DaspsLabeling.HAM, merge_control=True)
-    builder = DatasetBuilder(labeling_scheme, seglen=10, mode="dasps")
+    builder = DatasetBuilder(labeling_scheme, seglen=10, mode="both", debug=True)
 
     train, test = builder.build_deep_datasets_train_test(insert_ch_dim=False, test_subj_ids=[101, 102, 103])
 

@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import torch.nn as nn
 
 from models.cnn import EEGNet
+import random
 
 
 def compile_model(
@@ -195,10 +196,13 @@ def plot_training_results(train_losses, val_losses, train_acc, test_acc):
         (axs[0], {"Train Loss": train_losses, "Validation Loss": val_losses}, "Loss"),
         (axs[1], {"Train Accuracy": train_acc, "Test Accuracy": test_acc}, "Accuracy")
     ]
-    for ax, data_dict, title in configs:
+    for index, (ax, data_dict, title) in enumerate(configs):
         for label, values in data_dict.items():
             sns.lineplot(x=range(len(values)), y=values, ax=ax, label=label)
-        ax.set(ylim=(0, 1))
+
+        if index == 1:
+            ax.set(ylim=(0, 1))
+
         ax.set_title(title)
         ax.set_ylabel(title)
         ax.set_xlabel("Epochs")
@@ -207,28 +211,22 @@ def plot_training_results(train_losses, val_losses, train_acc, test_acc):
 
 
 # Global variables for parameters
-mode = "dasps"
+mode = "both"
 learning_rate = 0.00001
 batch_size = 16
 dropout = 0.4
-# class_weights = [1, 1, 1.3]
+# class_weights = [1, 1, 1.3, 1]
 class_weights = None
 l1_lambda = 0.0000
-seglen = 3
+seglen = 30
 merge_control = True
 oversample = True
 
 device = None
 use_gpu = True
-min_epochs = 10
-max_epochs = 100
 
-val_splits = [[
-    8, 9, 10,  # Low DASPS
-    4, 5, 7,  # High DASPS
-    108, 118, 119,  # Low SAD
-    402, 405, 413  # High SAD
-]]
+min_epochs = 6
+max_epochs = 7
 
 all_subj_ids = [
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
@@ -236,11 +234,14 @@ all_subj_ids = [
     114, 115, 116, 117, 118, 119, 120, 121, 401, 402, 403, 404, 405, 406, 407,
     408, 409, 410, 411, 412, 413, 414, 415, 416, 417, 418, 419, 420, 421]
 
+random.seed(42)
+shuffled_ids = all_subj_ids.copy()
+random.shuffle(shuffled_ids)
+
+n_in_split = 5
+# val_splits = [shuffled_ids[i:i+n_in_split] for i in range(0, len(shuffled_ids), n_in_split)]
+
 val_splits = [[i] for i in all_subj_ids]
-# val_splits = val_splits[:1]
-# val_splits = [[i] for i in [4, 5, 7, 9, 10, 14, 15, 18, 23, 20, 108, 118, 402, 405, 413]]
-# val_splits = [[4, 5, 7, 9, 10, 14, 15, 18, 23, 20, 108, 118, 402, 405, 413]]
-# val_splits = [[101]]
 
 
 def leave_subjects_out_cv(
@@ -360,5 +361,7 @@ if __name__ == "__main__":
     # Print class weights
     if class_weights is not None:
         print("Class weights: ", class_weights)
+
+    print("Total splits: ", len(val_splits))
 
     print("Script execution finished.")

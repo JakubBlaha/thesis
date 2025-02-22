@@ -8,7 +8,9 @@ class EEGNet(nn.Module):
     def __init__(self, num_classes, dropout=0.5, num_channels=14):  # num_channels added
         super(EEGNet, self).__init__()
 
-        n_feats_base = 20
+        print("N classes: ", num_classes)
+
+        n_feats_base = 10
         feat_grow_rate = 2
 
         n_feats_a = int(n_feats_base)
