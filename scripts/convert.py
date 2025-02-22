@@ -5,6 +5,7 @@ import h5py
 import numpy as np
 import pandas as pd
 import glob
+from matplotlib import pyplot as plt
 
 from constants import CHANNEL_NAMES, TARGET_SAMPLING_FREQ
 
@@ -34,8 +35,18 @@ DASPS_HAM_SEVERITY_SUBJECTS_MAP = {
     3: [1, 2, 3, 4, 5, 6, 7, 12, 16, 17, 19, 20, 22]
 }
 
-LFREQ = 4
-HFREQ = 40
+BANDPASS_FILTER_KW = {
+    "l_freq": 4,
+    "h_freq": 40,
+    "h_trans_bandwidth": 2,
+}
+
+BANDSTOP_FILTER_KW = {
+    "l_freq": 52,
+    "h_freq": 48,
+    "h_trans_bandwidth": 1,
+    "l_trans_bandwidth": 1
+}
 
 
 def get_epochs_from_mat(fname, subject_id):
@@ -48,21 +59,41 @@ def get_epochs_from_mat(fname, subject_id):
         ch_names=CHANNEL_NAMES, ch_types="eeg", sfreq=TARGET_SAMPLING_FREQ)
     info.set_montage('standard_1020')
 
-    data = data.swapaxes(1, 2)
-    epochs = mne.EpochsArray(data, info)
+    num_epochs = data.shape[0]
+
+    # Concatenate epochs
+    data = data.reshape(-1, 14)
+
+    # Make raw object
+    raw = mne.io.RawArray(data.T, info)
+
+    # print(raw.duration)
+
+    # Concatenate along first axis
+    # data = np.concatenate(data, axis=0)
+
+    print(data.shape)
+
+    # Filtering
+    raw.filter(**BANDPASS_FILTER_KW)  # type: ignore
+    raw.filter(**BANDSTOP_FILTER_KW)  # type: ignore
+
+    epochs = mne.make_fixed_length_epochs(raw, 15, preload=True)
+
+    # epochs = mne.EpochsArray(data, info)
 
     # Add metadata
     epochs.metadata = pd.DataFrame(
-        {"subject": [subject_id] * len(epochs),
-         "dataset": ["dasps"] * len(epochs)})
+        {"subject": [subject_id] * num_epochs,
+         "dataset": ["dasps"] * num_epochs})
 
     # epochs.compute_psd(fmin=0, fmax=64).plot()
     # plt.show()
 
     # Filtering
-    epochs.filter(l_freq=LFREQ, h_freq=HFREQ)
-    epochs.filter(l_freq=52, h_freq=48,
-                  l_trans_bandwidth=1, h_trans_bandwidth=1)
+    # epochs.filter(l_freq=LFREQ, h_freq=HFREQ)
+    # epochs.filter(l_freq=52, h_freq=48,
+    #               l_trans_bandwidth=1, h_trans_bandwidth=1)
 
     # epochs.compute_psd(fmin=0, fmax=64).plot(dB=False)
     # plt.savefig("./figures/DASPS/psd/" + str(subject_id) + ".png", dpi=300)
@@ -125,9 +156,8 @@ def convert_sad_to_fif():
         # raw.compute_psd(fmin=0, fmax=64).plot()
 
         # Filtering
-        raw.filter(l_freq=LFREQ, h_freq=HFREQ)
-        raw.filter(l_freq=52, h_freq=48,
-                   l_trans_bandwidth=1, h_trans_bandwidth=1)
+        raw.filter(**BANDPASS_FILTER_KW)  # type: ignore
+        raw.filter(**BANDSTOP_FILTER_KW)  # type: ignore
 
         # Downsample to 128 Hz
         raw = raw.resample(128)
