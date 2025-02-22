@@ -314,8 +314,17 @@ class DatasetBuilder:
         all_labels = []
         all_groups = []
 
-        for f in files:
+        for index, f in enumerate(files):
             epochs = mne.read_epochs(f, preload=True, verbose=False)
+            # epochs.filter(l_freq=4, h_freq=40, h_trans_bandwidth=2)
+
+            # if index == 0:
+            #     print(f)
+
+            #     fig = epochs.plot_psd(fmin=0, fmax=64)
+            #     fig.set_size_inches(20, 12)
+
+            #     plt.show()
 
             for index, epoch in enumerate(epochs):
                 metadata = epochs.metadata.iloc[index]
@@ -435,13 +444,13 @@ class TorchDeepDataset(Dataset):
 
 if __name__ == "__main__":
     # Normal dataset builder
-    labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
-    builder = DatasetBuilder(labeling_scheme, seglen=10)
-    df = builder.build_dataset_df()
+    # labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
+    # builder = DatasetBuilder(labeling_scheme, seglen=10)
+    # df = builder.build_dataset_df()
 
     # Deep dataset builder
     labeling_scheme = LabelingScheme(DaspsLabeling.HAM, merge_control=True)
-    builder = DatasetBuilder(labeling_scheme, seglen=3)
+    builder = DatasetBuilder(labeling_scheme, seglen=10, mode="dasps")
 
     train, test = builder.build_deep_datasets_train_test(insert_ch_dim=False, test_subj_ids=[101, 102, 103])
 
