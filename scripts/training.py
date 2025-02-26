@@ -1,5 +1,7 @@
 # %%
 import os
+import datetime
+import numpy as np
 
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, StandardScaler
 from sklearn.ensemble import RandomForestClassifier
@@ -10,6 +12,7 @@ from sklearn.neural_network import MLPClassifier
 from sklearn import svm
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.pipeline import Pipeline
+from sklearn.metrics import f1_score, precision_score, recall_score
 import pandas as pd
 
 from utils import DatasetBuilder, LabelingScheme, DaspsLabeling
@@ -176,6 +179,24 @@ def train_model(
         best_estimator, features, labels, groups=groups, cv=_cv,
         verbose=verbosity, n_jobs=None)
 
+    # Calculate additional metrics using cross-validation
+    f1_scores = []
+    precision_scores = []
+    recall_scores = []
+
+    for train_idx, test_idx in _cv.split(
+            features, labels, groups if cv == 'logo' else None):
+        X_train, X_test = features[train_idx], features[test_idx]
+        y_train, y_test = labels[train_idx], labels[test_idx]
+
+        best_estimator.fit(X_train, y_train)
+        y_pred = best_estimator.predict(X_test)
+
+        f1_scores.append(f1_score(y_test, y_pred, average='macro'))
+        precision_scores.append(precision_score(
+            y_test, y_pred, average='macro'))
+        recall_scores.append(recall_score(y_test, y_pred, average='macro'))
+
     # Output
 
     print("Searched parameters grid:")
@@ -211,9 +232,18 @@ def train_model(
 
     # Print scores as a table
     score_results = {
-        "Metric": ["Mean accuracy", "Std accuracy"],
-        "Value": [round(i, 2) for i in [scores.mean(), scores.std()]]
-    }
+        "Metric":
+        ["Mean accuracy", "Std accuracy", "Mean F1 (macro)",
+         "Mean Precision (macro)", "Mean Recall (macro)"],
+        "Value":
+        [round(i, 2)
+         for i
+         in
+         [scores.mean(),
+          scores.std(),
+          np.mean(f1_scores),
+          np.mean(precision_scores),
+          np.mean(recall_scores)]]}
 
     print(tabulate(score_results, headers="keys", tablefmt="pretty"))
 
@@ -228,7 +258,7 @@ def train_model(
             config_table, headers="keys", tablefmt="pretty",
             maxcolwidths=30))
 
-    return scores.mean()
+    return scores.mean(), np.mean(f1_scores), np.mean(precision_scores), np.mean(recall_scores)
 
 
 def train_models(
@@ -239,18 +269,29 @@ def train_models(
     for clf in ["svm-lin"]:
         for s in seglens:
             print(f"Training for classifier: {clf} with seglen: {s}")
-            acc = train_model(classif=clf, seglen=s,
-                              mode=mode, domains=domains,
-                              dasps_labeling_scheme=dasps_labeling_scheme,
-                              oversample=oversample, cv=cv)
+            acc, f1, precision, recall = train_model(
+                classif=clf, seglen=s, mode=mode, domains=domains,
+                dasps_labeling_scheme=dasps_labeling_scheme,
+                oversample=oversample, cv=cv)
             results.append({
                 'classifier': clf,
                 'seglen': s,
-                'mean_accuracy': acc
+                'mean_accuracy': acc,
+                'macro_f1': f1,
+                'macro_precision': precision,
+                'macro_recall': recall
             })
 
     df_results = pd.DataFrame(results)
-    csv_path = os.path.join(results_dir, "classif.csv")
+
+    # Generate timestamp and create a unique filename with all parameters
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    seglens_str = '-'.join(map(str, seglens))
+    domains_str = '-'.join(domains)
+    oversample_str = "os" if oversample else "nos"
+
+    filename = f"classif_{timestamp}_mode-{mode}_seglens-{seglens_str}_domains-{domains_str}_label-{dasps_labeling_scheme}_cv-{cv}_{oversample_str}.csv"
+    csv_path = os.path.join(results_dir, filename)
 
     df_results.to_csv(csv_path, index=False)
 
@@ -258,28 +299,3 @@ def train_models(
 
 
 verbosity = 10
-
-
-# if __name__ == "__main__":
-#     # Classifier
-#     classif = "svm-lin"
-
-#     # Segment length
-#     seglen = 10
-
-#     # Mode: gad, sad, both
-#     mode = "both"
-
-#     # Domains: abs_pow, rel_pow, conn, ai, time
-#     domains = ["rel_pow", "conn", "ai", "time", "abs_pow"]
-
-#     # Oversample: True, False
-#     oversample = True
-
-#     # DASPS labeling scheme: ham, sam
-#     dasps_labeling_scheme = "ham"
-
-#     # Cross validation: skf, logo
-#     cv = 'logo'
-
-#     train_model(classif=classif, seglen=seglen, mode=mode, domains=domains)
