@@ -105,7 +105,7 @@ def get_epoch_features(epoch):
         (max_freq - min_freq) * 4 + 1))
 
     res = mne_connectivity.spectral_connectivity_time(
-        epoch, freqs=freqs, method="wpli", sfreq=sfreq, mode="cwt_morlet",
+        epoch, freqs=freqs, method="wpli", sfreq=sfreq, mode="multitaper",
         fmin=min_freqs, fmax=max_freqs, faverage=True, n_jobs=1, verbose=0).get_data()
 
     conn_of_one_epoch = res[0]
