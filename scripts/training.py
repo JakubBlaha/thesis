@@ -1,4 +1,6 @@
 # %%
+import os
+
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, StandardScaler
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import LeaveOneGroupOut, StratifiedKFold, cross_val_score, GridSearchCV
@@ -8,9 +10,16 @@ from sklearn.neural_network import MLPClassifier
 from sklearn import svm
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.pipeline import Pipeline
+import pandas as pd
 
 from utils import DatasetBuilder, LabelingScheme, DaspsLabeling
 from tabulate import tabulate
+
+script_dir = os.path.dirname(__file__)
+data_dir = os.path.join(script_dir, '../data')
+results_dir = os.path.join(data_dir, 'results')
+
+os.makedirs(results_dir, exist_ok=True)
 
 GRID = {
     "svm-rbf": {
@@ -28,6 +37,13 @@ GRID = {
         "params": {
             "classif__C": [10**i for i in range(-3, 4)],
             "sel__k": [5, 8, 10, 20, 30, 40, 60, "all"]
+        }
+    },
+    "svm-lin": {
+        "classif": svm.LinearSVC,
+        "params": {
+            "classif__C": [10**i for i in range(-3, 4)],
+            "sel__k": [60]
         }
     },
     "svm-poly": {
@@ -89,41 +105,22 @@ GRID = {
             # "sel__k": [5, 8, 10, 20, 30, 40, 60, "all"],
             "sel__k": [20, 40, 60, "all"],
         }
-    }
+    },
 }
 
-# Classifier
-classif = "svm-lin"
 
-# Segment length
-seglen = 10
-
-# Mode: gad, sad, both
-mode = "both"
-
-# Domains: abs_pow, rel_pow, conn, ai, time
-domains = ["rel_pow", "conn", "ai", "time", "abs_pow"]
-
-# Oversample: True, False
-oversample = True
-
-# DASPS labeling scheme: ham, sam
-dasps_labeling_scheme = "ham"
-
-# Cross validation: skf, logo
-cv = 'logo'
-
-verbosity = 10
-
-
-def train_models():
+def train_model(
+        *, classif, seglen, mode, domains, dasps_labeling_scheme="ham",
+        oversample=True, cv='logo'):
     if dasps_labeling_scheme == "ham":
         _labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
     elif dasps_labeling_scheme == "sam":
         _labeling_scheme = LabelingScheme(DaspsLabeling.SAM)
 
-    builder = DatasetBuilder(_labeling_scheme, seglen, mode, oversample=oversample)
-    features, labels, groups, df = builder.build_dataset_feats_labels_groups_df(domains)
+    builder = DatasetBuilder(_labeling_scheme, seglen,
+                             mode, oversample=oversample)
+    features, labels, groups, df = builder.build_dataset_feats_labels_groups_df(
+        domains)
 
     n_feats = features.shape[1]
 
@@ -231,11 +228,58 @@ def train_models():
             config_table, headers="keys", tablefmt="pretty",
             maxcolwidths=30))
 
-# - Use a custom scoring function (for example balanced accuracy)
-# - Define a grid of params for SVM
-# - Try enabling overlap
-# - Remove corellated features
+    return scores.mean()
 
 
-if __name__ == "__main__":
-    train_models()
+def train_models(
+        *, seglens, mode, domains, dasps_labeling_scheme, oversample, cv):
+    results = []
+
+    # for clf in GRID.keys():
+    for clf in ["svm-lin"]:
+        for s in seglens:
+            print(f"Training for classifier: {clf} with seglen: {s}")
+            acc = train_model(classif=clf, seglen=s,
+                              mode=mode, domains=domains,
+                              dasps_labeling_scheme=dasps_labeling_scheme,
+                              oversample=oversample, cv=cv)
+            results.append({
+                'classifier': clf,
+                'seglen': s,
+                'mean_accuracy': acc
+            })
+
+    df_results = pd.DataFrame(results)
+    csv_path = os.path.join(results_dir, "classif.csv")
+
+    df_results.to_csv(csv_path, index=False)
+
+    print("Results saved to:", csv_path)
+
+
+verbosity = 10
+
+
+# if __name__ == "__main__":
+#     # Classifier
+#     classif = "svm-lin"
+
+#     # Segment length
+#     seglen = 10
+
+#     # Mode: gad, sad, both
+#     mode = "both"
+
+#     # Domains: abs_pow, rel_pow, conn, ai, time
+#     domains = ["rel_pow", "conn", "ai", "time", "abs_pow"]
+
+#     # Oversample: True, False
+#     oversample = True
+
+#     # DASPS labeling scheme: ham, sam
+#     dasps_labeling_scheme = "ham"
+
+#     # Cross validation: skf, logo
+#     cv = 'logo'
+
+#     train_model(classif=classif, seglen=seglen, mode=mode, domains=domains)

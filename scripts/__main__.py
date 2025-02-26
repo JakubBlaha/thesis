@@ -70,7 +70,20 @@ def main():
         logger.info("Labeling completed.")
 
     if args.command == "train" or _run_all:
-        train_models()
+        # seglens = [1, 2, 3, 5, 10, 15, 30]
+        seglens = [2]
+        domains = ["rel_pow", "conn", "ai", "time", "abs_pow"]
+        mode = "both"
+        dasps_labeling_scheme = "ham"
+        oversample = True
+        cv = 'logo'
+
+        logger.info(f"Training with seglens: {seglens}, mode: {mode}, domains: {domains}, "
+                    f"labeling scheme: {dasps_labeling_scheme}, oversample: {oversample}, cv: {cv}")
+
+        train_models(seglens=seglens, mode=mode, domains=domains,
+                     dasps_labeling_scheme=dasps_labeling_scheme,
+                     oversample=oversample, cv=cv)
         logger.info("Training completed.")
 
 
