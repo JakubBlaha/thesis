@@ -104,8 +104,9 @@ def get_epoch_features(epoch):
     freqs = np.linspace(min_freq, max_freq, int(
         (max_freq - min_freq) * 4 + 1))
 
+    # Frequency resolution is 1 Hz
     res = mne_connectivity.spectral_connectivity_time(
-        epoch, freqs=freqs, method="wpli", sfreq=sfreq, mode="multitaper",
+        epoch, freqs=freqs, method="wpli", sfreq=sfreq, mode="multitaper", n_cycles=4,
         fmin=min_freqs, fmax=max_freqs, faverage=True, n_jobs=1, verbose=0).get_data()
 
     conn_of_one_epoch = res[0]
