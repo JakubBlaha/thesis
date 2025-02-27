@@ -212,7 +212,7 @@ def plot_training_results(train_losses, val_losses, train_acc, test_acc):
 
 # Global variables for parameters
 mode = "both"
-learning_rate = 0.00001
+learning_rate = 0.000005
 batch_size = 16
 dropout = 0.4
 # class_weights = [1, 1, 1.3, 1]
@@ -225,8 +225,8 @@ oversample = True
 device = None
 use_gpu = True
 
-min_epochs = 6
-max_epochs = 7
+min_epochs = 12
+max_epochs = 13
 
 all_subj_ids = [
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
@@ -239,7 +239,12 @@ shuffled_ids = all_subj_ids.copy()
 random.shuffle(shuffled_ids)
 
 n_in_split = 5
-# val_splits = [shuffled_ids[i:i+n_in_split] for i in range(0, len(shuffled_ids), n_in_split)]
+val_splits = [shuffled_ids[i:i+n_in_split] for i in range(0, len(shuffled_ids), n_in_split)]
+
+# classes = [
+#     [10, 14, 8, 9, 15, 18, 23],
+#     [11, 13, 21, 1, 2, 3, 4, 5, 6, 7, 12, 16, 17, 19, 20, 22],
+# ]
 
 val_splits = [[i] for i in all_subj_ids]
 
