@@ -42,13 +42,13 @@ GRID = {
             "sel__k": [5, 8, 10, 20, 30, 40, 60, "all"]
         }
     },
-    "svm-lin": {
-        "classif": svm.LinearSVC,
-        "params": {
-            "classif__C": [10**i for i in range(-3, 4)],
-            "sel__k": [60]
-        }
-    },
+    # "svm-lin": {
+    #     "classif": svm.LinearSVC,
+    #     "params": {
+    #         "classif__C": [10**i for i in range(-3, 4)],
+    #         "sel__k": [60]
+    #     }
+    # },
     "svm-poly": {
         "classif": svm.SVC,
         "params": {
@@ -210,7 +210,8 @@ def train_model(
     # Print selected features
     selected_features = search.best_estimator_.named_steps['sel']
     selected_mask = selected_features.get_support()
-    print("Number of selected features:", sum(selected_mask))
+    num_selected_features = sum(selected_mask)
+    print("Number of selected features:", num_selected_features)
 
     # Selected features
     selected_features_names = df.columns[selected_mask]
@@ -218,6 +219,9 @@ def train_model(
         "Index": range(len(selected_features_names)),
         "Feature Name": selected_features_names
     }
+    
+    # Create string of selected feature names for storage
+    selected_features_str = ", ".join(selected_features_names)
 
     print("Selected features:")
     print(tabulate(selected_features_table, headers="keys", tablefmt="pretty"))
@@ -258,18 +262,21 @@ def train_model(
             config_table, headers="keys", tablefmt="pretty",
             maxcolwidths=30))
 
-    return scores.mean(), np.mean(f1_scores), np.mean(precision_scores), np.mean(recall_scores)
+    # Convert best parameters to a string for storage
+    best_params_str = ", ".join([f"{k}={v}" for k, v in search.best_params_.items()])
+
+    return scores.mean(), np.mean(f1_scores), np.mean(precision_scores), np.mean(recall_scores), best_params_str, num_selected_features, selected_features_str
 
 
 def train_models(
         *, seglens, mode, domains, dasps_labeling_scheme, oversample, cv):
     results = []
 
-    # for clf in GRID.keys():
-    for clf in ["svm-lin"]:
+    for clf in GRID.keys():
+    # for clf in ["svm-lin"]:
         for s in seglens:
             print(f"Training for classifier: {clf} with seglen: {s}")
-            acc, f1, precision, recall = train_model(
+            acc, f1, precision, recall, best_params, num_features, feature_names = train_model(
                 classif=clf, seglen=s, mode=mode, domains=domains,
                 dasps_labeling_scheme=dasps_labeling_scheme,
                 oversample=oversample, cv=cv)
@@ -279,10 +286,17 @@ def train_models(
                 'mean_accuracy': acc,
                 'macro_f1': f1,
                 'macro_precision': precision,
-                'macro_recall': recall
+                'macro_recall': recall,
+                'best_params': best_params,
+                'num_selected_features': num_features,
+                'selected_features': feature_names
             })
 
     df_results = pd.DataFrame(results)
+    
+    # Round numeric columns to 3 decimal places
+    numeric_columns = ['mean_accuracy', 'macro_f1', 'macro_precision', 'macro_recall']
+    df_results[numeric_columns] = df_results[numeric_columns].round(3)
 
     # Generate timestamp and create a unique filename with all parameters
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")

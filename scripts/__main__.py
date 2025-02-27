@@ -64,6 +64,7 @@ def main():
         "--labeling-scheme",
         choices=["ham", "sam"],
         help="DASPS labeling scheme to use (ham or sam)",
+        required=True,
     )
     
     cmd_parsers["train"].add_argument(
@@ -87,9 +88,9 @@ def main():
     
     cmd_parsers["train"].add_argument(
         "--cv",
-        choices=["logo", "kfold"],
-        default="logo",
-        help="Cross-validation strategy (default: logo)",
+        choices=["logo", "skf"],
+        required=True,
+        help="Cross-validation strategy",
     )
     
     cmd_parsers["train"].add_argument(
