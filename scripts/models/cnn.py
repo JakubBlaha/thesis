@@ -1,9 +1,5 @@
 import torch.nn as nn
 
-# Inspired by the following
-# https://github.com/CNN-for-EEG-classification/CNN-EEG/blob/main/convNet.py
-
-
 class EEGNet(nn.Module):
     def __init__(self, num_classes, dropout=0.5, num_channels=14):  # num_channels added
         super(EEGNet, self).__init__()
