@@ -32,6 +32,14 @@ def main():
             help="Segment length in seconds",
             required=True
         )
+        
+    # Add labeling scheme argument for both train and all commands
+    for parser_name in ["train", "all"]:
+        cmd_parsers[parser_name].add_argument(
+            "--labeling-scheme",
+            choices=["ham", "sam"],
+            help="DASPS labeling scheme to use (ham or sam)",
+        )
 
     args = parser.parse_args()
 
@@ -74,7 +82,7 @@ def main():
         seglens = [2]
         domains = ["rel_pow", "conn", "ai", "time", "abs_pow"]
         mode = "both"
-        dasps_labeling_scheme = "ham"
+        dasps_labeling_scheme = args.labeling_scheme
         oversample = True
         cv = 'logo'
 
