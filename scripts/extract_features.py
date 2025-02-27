@@ -189,7 +189,7 @@ def get_features_of_all_epochs(path) -> pd.DataFrame:
     return pd.DataFrame(epoch_dicts)
 
 
-def extract_features_from_all_segments():
+def extract_features_from_all_segments(seglen=None):
     pattern = os.path.join(segmented_path, "*/clean/*-epo.fif")
     paths_to_subject_epochs = glob.glob(pattern)
 
@@ -204,8 +204,19 @@ def extract_features_from_all_segments():
             paths_by_segment_length[segment_length] = []
 
         paths_by_segment_length[segment_length].append(path)
+    
+    # If seglen is specified, only process that segment length
+    if seglen is not None:
+        if seglen in paths_by_segment_length:
+            segment_lengths = [seglen]
+        else:
+            logging.warning(f"No segments found with length {seglen}s")
+            return
+    else:
+        segment_lengths = list(paths_by_segment_length.keys())
 
-    for seglen, paths in paths_by_segment_length.items():
+    for seglen in segment_lengths:
+        paths = paths_by_segment_length[seglen]
         output_file_path = f'{out_dir}/features_{seglen}s.csv'
 
         if os.path.exists(output_file_path):
@@ -220,9 +231,3 @@ def extract_features_from_all_segments():
 
         # Save features into CSV for segment length
         df.to_csv(output_file_path, index=False)
-
-
-if __name__ == "__main__":
-    extract_features_from_all_segments()
-
-# %%
