@@ -7,10 +7,16 @@ import mne_connectivity
 import numpy as np
 import pandas as pd
 import logging
+import concurrent.futures
+from functools import partial
+import multiprocessing
 
 from constants import CHANNEL_NAMES, TARGET_SAMPLING_FREQ as sfreq, SAD_MULTIPLY_FACTOR
 
 logger = logging.getLogger(__name__)
+
+# Get the number of CPU cores available
+N_CORES = multiprocessing.cpu_count()
 
 n_channels = len(CHANNEL_NAMES)
 freq_bands = {
@@ -138,8 +144,34 @@ def get_epoch_features(epoch):
     return d
 
 
-def get_features_of_all_epochs(path) -> pd.DataFrame:
-    print(path)
+def process_single_epoch(epoch_index, epoch, meta, dataset, subject_id, ham_label, sad_severity):
+    """Process a single epoch and return its features dict"""
+    # SAM label is different for each epoch
+    sam_label = None
+
+    if "sam" in meta.columns:
+        sam_label = meta.iloc[epoch_index]["sam"]
+
+    if dataset == "SAD":
+        epoch = (epoch.T * SAD_MULTIPLY_FACTOR).T  # type: ignore
+
+    d = get_epoch_features(epoch)
+
+    d.update({
+        'subject': subject_id,
+        'dataset': dataset,
+        'uniq_subject_id': f'{dataset}_{subject_id}',
+        'sam': sam_label,
+        'ham': ham_label,
+        'stai': sad_severity
+    })
+
+    return d
+
+
+def get_features_of_all_epochs(path, max_workers=None) -> pd.DataFrame:
+    """Extract features from all epochs in a file with parallel processing"""
+    print(f"Processing {path}")
 
     epochs = mne.read_epochs(path)
     meta: pd.DataFrame = epochs.metadata  # type: ignore
@@ -150,46 +182,53 @@ def get_features_of_all_epochs(path) -> pd.DataFrame:
 
     # HAM label is the same for all epochs in the DASPS dataset
     ham_label = None
-
     if "ham" in meta.columns:
         ham_label = meta.iloc[0]["ham"]
 
     # STAI score is the same for all epochs in the SAD dataset
     sad_severity = None
-
     if "stai" in meta.columns:
         sad_severity = meta.iloc[0]["stai"]
 
+    if max_workers is None:
+        max_workers = max(1, N_CORES - 1)  # Leave one core free
+    
+    process_func = partial(
+        process_single_epoch,
+        meta=meta,
+        dataset=dataset, 
+        subject_id=subject_id,
+        ham_label=ham_label,
+        sad_severity=sad_severity
+    )
+    
     # Build a dict of features for each epoch
     epoch_dicts = []
-
-    for index, epoch in enumerate(epochs):
-        # SAM label is different for each epoch
-        sam_label = None
-
-        if "sam" in meta.columns:
-            sam_label = meta.iloc[index]["sam"]
-
-        if dataset == "SAD":
-            epoch = (epoch.T * SAD_MULTIPLY_FACTOR).T  # type: ignore
-
-        d = get_epoch_features(epoch)
-
-        d.update({
-            'subject': subject_id,
-            'dataset': dataset,
-            'uniq_subject_id': f'{dataset}_{subject_id}',
-            'sam': sam_label,
-            'ham': ham_label,
-            'stai': sad_severity
-        })
-
-        epoch_dicts.append(d)
-
+    
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(process_func, i, epoch) for i, epoch in enumerate(epochs)]
+        
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                result = future.result()
+                epoch_dicts.append(result)
+            except Exception as e:
+                logging.error(f"Error processing epoch: {e}")
+    
     return pd.DataFrame(epoch_dicts)
 
 
-def extract_features_from_all_segments():
+def process_subject_file(path, seglen):
+    """Process a single subject file and return its DataFrame"""
+    try:
+        return get_features_of_all_epochs(path)
+    except Exception as e:
+        logging.error(f"Error processing {path}: {e}")
+        return pd.DataFrame()
+
+
+def extract_features_from_all_segments(max_workers=None):
+    """Extract features from all segments with parallel processing"""
     pattern = os.path.join(segmented_path, "*/clean/*-epo.fif")
     paths_to_subject_epochs = glob.glob(pattern)
 
@@ -205,6 +244,9 @@ def extract_features_from_all_segments():
 
         paths_by_segment_length[segment_length].append(path)
 
+    if max_workers is None:
+        max_workers = N_CORES
+    
     for seglen, paths in paths_by_segment_length.items():
         output_file_path = f'{out_dir}/features_{seglen}s.csv'
 
@@ -212,14 +254,29 @@ def extract_features_from_all_segments():
             print(f"Skipping existing {output_file_path}")
             continue
 
-        print(f"Extracting features for {seglen}s segments")
+        print(f"Extracting features for {seglen}s segments ({len(paths)} files)")
+        
+        all_dfs = []
+        
+        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+            process_func = partial(process_subject_file, seglen=seglen)
+            futures = [executor.submit(process_func, path) for path in paths]
+            
+            for i, future in enumerate(concurrent.futures.as_completed(futures)):
+                try:
+                    df = future.result()
+                    if not df.empty:
+                        all_dfs.append(df)
+                    print(f"Completed {i+1}/{len(paths)} files for {seglen}s segments")
+                except Exception as e:
+                    logging.error(f"Error in future: {e}")
 
-        all_dfs = [get_features_of_all_epochs(path) for path in paths]
-
-        df = pd.concat(all_dfs)
-
-        # Save features into CSV for segment length
-        df.to_csv(output_file_path, index=False)
+        if all_dfs:
+            df = pd.concat(all_dfs)
+            df.to_csv(output_file_path, index=False)
+            print(f"Saved features for {seglen}s segments to {output_file_path}")
+        else:
+            logging.warning(f"No data processed for {seglen}s segments")
 
 
 if __name__ == "__main__":
