@@ -12,8 +12,8 @@ def plot(path):
     fig.set_size_inches(20, 12)
 
 
-plot("data/segmented/2s/clean/S017-epo.fif")
-plot("data/segmented/2s/clean/S103-epo.fif")
+plot("data/segmented/10s/clean/S017-epo.fif")
+# plot("data/segmented/10s/clean/S103-epo.fif")
 # plot("data/segmented/10s/clean/S403-epo.fif")
 
 plt.show()
