@@ -172,15 +172,17 @@ class DatasetBuilder:
         for d in domains:
             if d not in self._feat_domain_prefix:
                 raise ValueError(f'Invalid domain: {d}')
+            
+        filtered_domains = domains.copy()
+        
+        if len(filtered_domains) == 0:
+            filtered_domains += ["time", "rel_pow", "conn", "ai"]
 
-        if len(domains) == 0:
-            domains += ["time", "rel_pow", "conn", "ai"]
-
-        domains += ['dataset', 'label', "uniq_subject_id"]
+        filtered_domains += ['dataset', 'label', "uniq_subject_id"]
 
         # Keep only the selected domains
         cols = [col for col in df.columns if any(
-            [col.startswith(d) for d in domains])]
+            [col.startswith(d) for d in filtered_domains])]
 
         return df[cols]
 
@@ -458,14 +460,20 @@ class TorchDeepDataset(Dataset):
 
 if __name__ == "__main__":
     # Normal dataset builder
-    # labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
-    # builder = DatasetBuilder(labeling_scheme, seglen=10)
-    # df = builder.build_dataset_df()
+    labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
+    builder = DatasetBuilder(labeling_scheme, seglen=10, oversample=False, mode="both")
+    feats, labels, groups, df = builder.build_dataset_feats_labels_groups_df()
+
+    # Count number of labels
+    print("Label counts:")
+    unique_labels, counts = np.unique(labels, return_counts=True)
+    for label, count in zip(unique_labels, counts):
+        print(label, count)
 
     # Deep dataset builder
-    labeling_scheme = LabelingScheme(DaspsLabeling.HAM, merge_control=True)
-    builder = DatasetBuilder(labeling_scheme, seglen=10, mode="both", debug=True)
+    # labeling_scheme = LabelingScheme(DaspsLabeling.HAM, merge_control=True)
+    # builder = DatasetBuilder(labeling_scheme, seglen=10, mode="both", debug=True)
 
-    train, test = builder.build_deep_datasets_train_test(insert_ch_dim=False, test_subj_ids=[101, 102, 103])
+    # train, test = builder.build_deep_datasets_train_test(insert_ch_dim=False, test_subj_ids=[101, 102, 103])
 
 # %%
