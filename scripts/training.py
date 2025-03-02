@@ -10,8 +10,8 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn import svm
-from sklearn.feature_selection import SelectKBest, f_classif
-from sklearn.pipeline import Pipeline
+from sklearn.feature_selection import SelectFdr, SelectFpr, SelectKBest, f_classif
+from sklearn.pipeline import FunctionTransformer, Pipeline
 from sklearn.metrics import f1_score, precision_score, recall_score
 import pandas as pd
 
@@ -31,6 +31,7 @@ GRID = {
             "classif__C": [10**i for i in range(-3, 5)],
             "classif__gamma": [10**i for i in range(-9, 0)],
             "classif__kernel": ['rbf'],
+            "classif__max_iter": [5000],
             "sel__k": [5, 8, 10, 20, 30, 40, 60, 100, "all"]
         }
     },
@@ -39,6 +40,7 @@ GRID = {
         "classif": svm.LinearSVC,
         "params": {
             "classif__C": [10**i for i in range(-3, 4)],
+            "classif__max_iter": [5000],
             "sel__k": [5, 8, 10, 20, 30, 40, 60, "all"]
         }
     },
@@ -56,6 +58,7 @@ GRID = {
             "classif__gamma": [10**i for i in range(-9, 0)],
             "classif__kernel": ['poly'],
             "classif__degree": [2, 3, 4],
+            "classif__max_iter": [5000],
             "sel__k": [20, 30, 40, 60, "all"]
         }
     },
@@ -71,13 +74,13 @@ GRID = {
             "sel__k": [5, 10, 20, 40, 60, "all"]
         }
     },
-    "nb": {
-        "classif": GaussianNB,
-        "params": {
-            "classif__var_smoothing": [10**i for i in range(-9, 0)],
-            "sel__k": [5, 8, 10, 20, 30, 40, 60]
-        }
-    },
+    # "nb": {
+    #     "classif": GaussianNB,
+    #     "params": {
+    #         "classif__var_smoothing": [10**i for i in range(-9, 0)],
+    #         "sel__k": [5, 8, 10, 20, 30, 40, 60]
+    #     }
+    # },
     "knn": {
         "classif": KNeighborsClassifier,
         "params": {
@@ -96,19 +99,19 @@ GRID = {
             "sel__k": [20, 40, 60, "all"]
         },
     },
-    "lda": {
-        "classif": LinearDiscriminantAnalysis,
-        "params": {
-            # "classif__solver": ['svd', 'lsqr', 'eigen'],
-            "classif__solver": ['lsqr'],
-            # "classif__shrinkage": [None, 'auto'] + [i/10.0 for i in range(1, 10)],
-            "classif__shrinkage": ['auto'],
-            # "classif__tol": [10**i for i in range(-9, 0)],
-            # "classif__n_components": [1, 2, 3, 5, None],
-            # "sel__k": [5, 8, 10, 20, 30, 40, 60, "all"],
-            "sel__k": [20, 40, 60, "all"],
-        }
-    },
+    # "lda": {
+    #     "classif": LinearDiscriminantAnalysis,
+    #     "params": {
+    #         # "classif__solver": ['svd', 'lsqr', 'eigen'],
+    #         "classif__solver": ['lsqr'],
+    #         # "classif__shrinkage": [None, 'auto'] + [i/10.0 for i in range(1, 10)],
+    #         "classif__shrinkage": ['auto'],
+    #         # "classif__tol": [10**i for i in range(-9, 0)],
+    #         # "classif__n_components": [1, 2, 3, 5, None],
+    #         # "sel__k": [5, 8, 10, 20, 30, 40, 60, "all"],
+    #         "sel__k": [20, 40, 60, "all"],
+    #     }
+    # },
 }
 
 
@@ -144,22 +147,25 @@ def train_model(
 
     # Make sure that the number of features in the grid is never
     # greater than the number of available features
-    _corrected_feat_selection_grid = []
+    if "sel__k" in param_grid:
+        _corrected_feat_selection_grid = []
 
-    for i in param_grid["sel__k"]:
-        if type(i) == int:
-            if i <= n_feats:
+        for i in param_grid["sel__k"]:
+            if type(i) == int:
+                if i <= n_feats:
+                    _corrected_feat_selection_grid.append(i)
+            else:
                 _corrected_feat_selection_grid.append(i)
-        else:
-            _corrected_feat_selection_grid.append(i)
 
-    param_grid["sel__k"] = _corrected_feat_selection_grid
+        # param_grid["sel__k"] = _corrected_feat_selection_grid
+        param_grid["sel__k"] = [60]
 
     # Create pipeline with feature selection and SVM
     pipeline = Pipeline([
         # ('scaler', MinMaxScaler((0, 1))),
         ('scaler', StandardScaler()),
         ('sel', SelectKBest(score_func=f_classif)),
+        # ('sel', SelectFpr(score_func=f_classif, alpha=0.05)),
         ('classif', GRID[classif]["classif"]())
     ])
 
@@ -195,17 +201,20 @@ def train_model(
         f1_scores.append(f1_score(y_test, y_pred, average='macro'))
         precision_scores.append(precision_score(
             y_test, y_pred, average='macro'))
-        recall_scores.append(recall_score(y_test, y_pred, average='macro'))
+        recall_scores.append(recall_score(y_test, y_pred, average='macro', zero_division=0))
 
     # Output
 
     print("Searched parameters grid:")
-    param_table = {
-        "Parameter": list(param_grid.keys()),
-        "Values": [str(values) for values in param_grid.values()]
-    }
-    print(tabulate(param_table, headers="keys",
-          tablefmt="pretty", maxcolwidths=30))
+    if param_grid:  # Only try to tabulate if there are parameters
+        param_table = {
+            "Parameter": list(param_grid.keys()),
+            "Values": [str(values) for values in param_grid.values()]
+        }
+        print(tabulate(param_table, headers="keys",
+              tablefmt="pretty", maxcolwidths=30))
+    else:
+        print("No parameters in grid.")
 
     # Print selected features
     selected_features = search.best_estimator_.named_steps['sel']
@@ -273,7 +282,7 @@ def train_models(
     results = []
 
     for clf in GRID.keys():
-    # for clf in ["svm-lin"]:
+    # for clf in ["knn"]:
         for s in seglens:
             print(f"Training for classifier: {clf} with seglen: {s}")
             acc, f1, precision, recall, best_params, num_features, feature_names = train_model(

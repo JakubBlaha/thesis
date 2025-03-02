@@ -154,7 +154,30 @@ class DatasetBuilder:
 
         features = df.to_numpy()
 
-        # TODO this first needs to balance control classes
+        int_to_label = {i: label for i, label in enumerate(label_encoder.classes_)}
+        label_to_int = {label: i for i, label in int_to_label.items()}
+
+        if self.debug:
+            self._output_label_counts(labels, int_to_label)
+
+        # Match control class sample count
+        if self.oversample and self._labeling_scheme.merge_control and self.mode == "both":
+            features, labels, groups = random_oversample(
+                features, labels, groups, oversample_labels=[label_to_int["LO_GAD"], label_to_int["LO_SAD"]])
+
+            if self.debug:
+                self._output_label_counts(labels, int_to_label)
+
+        if self._labeling_scheme.merge_control and self.mode == "both":
+            lo_gad = label_encoder.transform(["LO_GAD"])[0]
+            lo_sad = label_encoder.transform(["LO_SAD"])[0]
+
+            control = min(lo_gad, lo_sad)
+
+            labels[(labels == lo_gad) | (labels == lo_sad)] = control
+
+            if self.debug:
+                print("Merged control class")
 
         if self.oversample:
             features, labels, groups = random_oversample(
@@ -461,7 +484,7 @@ class TorchDeepDataset(Dataset):
 if __name__ == "__main__":
     # Normal dataset builder
     labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
-    builder = DatasetBuilder(labeling_scheme, seglen=10, oversample=False, mode="both")
+    builder = DatasetBuilder(labeling_scheme, seglen=10, oversample=True, mode="both", debug=True)
     feats, labels, groups, df = builder.build_dataset_feats_labels_groups_df()
 
     # Count number of labels
