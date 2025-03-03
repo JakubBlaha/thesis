@@ -24,12 +24,14 @@ results_dir = os.path.join(data_dir, 'results')
 
 os.makedirs(results_dir, exist_ok=True)
 
+# TODO unify feature ranges
+
 GRID = {
     "svm-rbf": {
         "classif": svm.SVC,
         "params": {
             "classif__C": [10**i for i in range(-3, 5)],
-            "classif__gamma": [10**i for i in range(-9, 0)],
+            "classif__gamma": [10**i for i in range(-5, 0)],
             "classif__kernel": ['rbf'],
             "classif__max_iter": [5000],
             "sel__k": [5, 8, 10, 20, 30, 40, 60, 100, "all"]
@@ -54,8 +56,8 @@ GRID = {
     "svm-poly": {
         "classif": svm.SVC,
         "params": {
-            "classif__C": [10**i for i in range(-3, 5)],
-            "classif__gamma": [10**i for i in range(-9, 0)],
+            "classif__C": [10**i for i in range(-3, 2)],
+            "classif__gamma": [10**i for i in range(-4, 0)],
             "classif__kernel": ['poly'],
             "classif__degree": [2, 3, 4],
             "classif__max_iter": [5000],
@@ -157,8 +159,8 @@ def train_model(
             else:
                 _corrected_feat_selection_grid.append(i)
 
-        # param_grid["sel__k"] = _corrected_feat_selection_grid
-        param_grid["sel__k"] = [60]
+        param_grid["sel__k"] = _corrected_feat_selection_grid
+        # param_grid["sel__k"] = [60]
 
     # Create pipeline with feature selection and SVM
     pipeline = Pipeline([
@@ -201,7 +203,10 @@ def train_model(
         f1_scores.append(f1_score(y_test, y_pred, average='macro'))
         precision_scores.append(precision_score(
             y_test, y_pred, average='macro'))
-        recall_scores.append(recall_score(y_test, y_pred, average='macro', zero_division=0))
+        recall_scores.append(
+            recall_score(
+                y_test, y_pred, average='macro',
+                zero_division=0))
 
     # Output
 
@@ -228,7 +233,7 @@ def train_model(
         "Index": range(len(selected_features_names)),
         "Feature Name": selected_features_names
     }
-    
+
     # Create string of selected feature names for storage
     selected_features_str = ", ".join(selected_features_names)
 
@@ -272,17 +277,32 @@ def train_model(
             maxcolwidths=30))
 
     # Convert best parameters to a string for storage
-    best_params_str = ", ".join([f"{k}={v}" for k, v in search.best_params_.items()])
+    best_params_str = ", ".join(
+        [f"{k}={v} "for k, v in search.best_params_.items()])
 
     return scores.mean(), np.mean(f1_scores), np.mean(precision_scores), np.mean(recall_scores), best_params_str, num_selected_features, selected_features_str
 
 
 def train_models(
-        *, seglens, mode, domains, dasps_labeling_scheme, oversample, cv):
+        *, seglens, mode, domains, dasps_labeling_scheme, oversample, cv,
+        classifiers):
     results = []
 
-    for clf in GRID.keys():
-    # for clf in ["knn"]:
+    # Validate that all requested classifiers exist in GRID
+    valid_classifiers = []
+    for clf in classifiers:
+        if clf in GRID:
+            valid_classifiers.append(clf)
+        else:
+            print(
+                f"Warning: Classifier '{clf}' not found in GRID. Available classifiers: {list(GRID.keys())}")
+
+    if not valid_classifiers:
+        print(
+            f"Error: None of the requested classifiers are available. Available classifiers: {list(GRID.keys())}")
+        return
+
+    for clf in valid_classifiers:
         for s in seglens:
             print(f"Training for classifier: {clf} with seglen: {s}")
             acc, f1, precision, recall, best_params, num_features, feature_names = train_model(
@@ -302,9 +322,10 @@ def train_models(
             })
 
     df_results = pd.DataFrame(results)
-    
+
     # Round numeric columns to 3 decimal places
-    numeric_columns = ['mean_accuracy', 'macro_f1', 'macro_precision', 'macro_recall']
+    numeric_columns = ['mean_accuracy', 'macro_f1',
+                       'macro_precision', 'macro_recall']
     df_results[numeric_columns] = df_results[numeric_columns].round(3)
 
     # Generate timestamp and create a unique filename with all parameters

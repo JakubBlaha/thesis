@@ -12,4 +12,7 @@
 # python3 -m scripts train --labeling-scheme ham --cv logo --seglens 5 
 # python3 -m scripts train --labeling-scheme ham --cv logo --seglens 3 
 # python3 -m scripts train --labeling-scheme ham --cv logo --seglens 2 
-python3 -m scripts train --labeling-scheme ham --cv logo --seglens 1 
+# python3 -m scripts train --labeling-scheme ham --cv logo --seglens 1 --classifiers svm-poly,rf,knn,mlp
+
+
+python3 -m scripts train --labeling-scheme ham --cv logo --seglens 15 --classifiers svm-lin,svm-rbf,svm-poly,rf,knn,mlp

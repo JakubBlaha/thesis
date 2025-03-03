@@ -38,6 +38,12 @@ def parse_seglens(seglens_str):
     
     return seglens
 
+def parse_classifiers(classifiers_str):
+    """Parse comma-separated classifiers string into a list."""
+    if not classifiers_str:
+        return []
+    return [clf.strip() for clf in classifiers_str.split(',')]
+
 def main():
     parser = argparse.ArgumentParser()
 
@@ -98,6 +104,12 @@ def main():
         required=True,
         help="Comma-separated list of segment lengths to use (e.g., '1,2,5'). Valid values: 1, 2, 3, 5, 10, 15, 30",
     )
+    
+    cmd_parsers["train"].add_argument(
+        "--classifiers",
+        required=True,
+        help="Comma-separated list of classifiers to use (e.g., 'svm-rbf,rf,knn')",
+    )
 
     args = parser.parse_args()
 
@@ -146,13 +158,18 @@ def main():
         dasps_labeling_scheme = args.labeling_scheme
         oversample = not args.no_oversample
         cv = args.cv
+        classifiers = parse_classifiers(args.classifiers)
+        
+        if not classifiers:
+            logger.error("No valid classifiers provided")
+            return
 
-        logger.info(f"Training with seglens: {seglens}, mode: {mode}, domains: {domains}, "
+        logger.info(f"Training with classifiers: {classifiers}, seglens: {seglens}, mode: {mode}, domains: {domains}, "
                     f"labeling scheme: {dasps_labeling_scheme}, oversample: {oversample}, cv: {cv}")
 
         train_models(seglens=seglens, mode=mode, domains=domains,
                      dasps_labeling_scheme=dasps_labeling_scheme,
-                     oversample=oversample, cv=cv)
+                     oversample=oversample, cv=cv, classifiers=classifiers)
         logger.info("Training completed.")
 
 
