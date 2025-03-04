@@ -102,7 +102,7 @@ def gen_seglens_plot():
     print(avg_by_seglen)
 
     # Save plot
-    plot_path = os.path.join(plots_path, "seglens_plot.svg")
+    plot_path = os.path.join(plots_path, "seglens_plot.pdf")
     plt.savefig(plot_path)
 
 
@@ -129,13 +129,18 @@ def plot_feature_significance(csv_data):
 
     # Create vertical bar plot (horizontal visually)
     plt.figure(figsize=(8, 10))  # Adjust figure size for vertical orientation
-    bars = plt.barh(list(reversed(features)), list(reversed(counts)))
 
-    # Customize plot
-    # plt.title('Feature Significance Across Classifiers', fontsize=14)
-    plt.ylabel('Features', fontsize=12)
-    plt.xlabel('Frequency of Selection', fontsize=12)
-    plt.yticks(fontsize=8)
+    # Make bars narrower by setting height parameter (which affects width in horizontal bars)
+    bars = plt.barh(
+        list(reversed(features)),
+        list(reversed(counts)),
+        height=0.5)
+
+    # Customize plot with bigger text
+    plt.ylabel('Features', fontsize=14)
+    plt.xlabel('Frequency of Selection', fontsize=14)
+    plt.yticks(fontsize=10)  # Increase y-axis label size
+    plt.xticks(fontsize=10)  # Increase x-axis label size
 
     # Add grid lines for better readability
     plt.grid(axis='x', linestyle='--', alpha=0.7)
@@ -151,13 +156,80 @@ def plot_feature_significance(csv_data):
     plt.tight_layout()
 
     # Save plot
-    plot_path = os.path.join(plots_path, "feature_significance.svg")
+    plot_path = os.path.join(plots_path, "feature_significance.pdf")
     plt.savefig(plot_path)
 
     # Print top 10 most frequent features
     print("\nTop 10 Most Frequently Selected Features:")
     for feature, count in sorted_features[:10]:
         print(f"{feature}: {count} times")
+
+
+def generate_feature_table_latex(csv_data):
+    """Generate a LaTeX table of features ranked by inclusion frequency with two columns."""
+    # Read CSV data into a DataFrame
+    df = pd.read_csv(io.StringIO(csv_data))
+
+    # Extract all features from the selected_features column
+    all_features = []
+    for features in df['selected_features']:
+        # Split the feature string into a list and clean it
+        feature_list = [f.strip() for f in features.split(',')]
+        all_features.extend(feature_list)
+
+    # Count frequency of each feature
+    feature_counts = Counter(all_features)
+
+    # Sort features by frequency
+    sorted_features = sorted(
+        feature_counts.items(),
+        key=lambda x: x[1],
+        reverse=True)
+
+    # Calculate midpoint to split into two columns
+    midpoint = len(sorted_features) // 2
+    if len(sorted_features) % 2 != 0:
+        midpoint += 1  # Ensure first column gets the extra item if odd number
+
+    first_column = sorted_features[:midpoint]
+    second_column = sorted_features[midpoint:]
+
+    # Pad second column with empty rows if needed
+    while len(second_column) < len(first_column):
+        second_column.append(("", ""))
+
+    # Create LaTeX table with two columns of features
+    # latex_table = "\\begin{tabular}[H]{|l|c|l|c|}\n"
+    # latex_table += "\\hline\n"
+    latex_table += "\\textbf{Feature} & \\textbf{Freq.} & \\textbf{Feature} & \\textbf{Freq.} \\\\\n"
+    latex_table += "\\hline\n"
+
+    for i in range(len(first_column)):
+        feature1, count1 = first_column[i]
+        feature1_escaped = feature1.replace('_', '\\_')
+
+        # Check if we have a valid second feature
+        if i < len(second_column) and second_column[i][0]:
+            feature2, count2 = second_column[i]
+            feature2_escaped = feature2.replace('_', '\\_')
+            latex_table += f"{feature1_escaped}  & {count1}  & {
+                feature2_escaped}  & {count2}  \\\\\n"
+        else:
+            latex_table += f"{feature1_escaped} & {count1} & & \\\\\n"
+
+    latex_table += "\\hline\n"
+    # latex_table += "\\end{tabular}"
+
+    # Save LaTeX table to CSV
+    table_path = os.path.join(plots_path, "feature_table.tex")
+    with open(table_path, 'w') as f:
+        f.write(latex_table)
+
+    print(f"LaTeX table saved to {table_path}")
+
+    # Print stats
+    print(f"\nTotal unique features: {len(sorted_features)}")
+    print(f"Top 5 features: {sorted_features[:5]}")
 
 
 def gen_feature_significance_plot():
@@ -168,6 +240,7 @@ def gen_feature_significance_plot():
         with open(feature_csv_path, 'r') as f:
             csv_data = f.read()
         plot_feature_significance(csv_data)
+        generate_feature_table_latex(csv_data)
     else:
         print(
             f"Warning: Feature significance data not found at {feature_csv_path}")
