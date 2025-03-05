@@ -68,7 +68,7 @@ GRID = {
     "rf": {
         "classif": RandomForestClassifier,
         "params": {
-            "classif__n_estimators": [200, 300, 400],
+            "classif__n_estimators": [300, 400, 450],
             "classif__max_depth": [5, 6, 8, 10, 15, 20],
             # "min_samples_split": [2, 5, 10],
             # "min_samples_leaf": [1, 2, 4],
@@ -86,6 +86,8 @@ GRID = {
     "knn": {
         "classif": KNeighborsClassifier,
         "params": {
+            "classif__n_neighbors": [3, 5, 8, 10, 15, 20, 30],
+            "classif__weights": ['uniform', 'distance'],
             "sel__k": [1, 2, 3, 4, 5, 8, 10, 20, 30, 40, 60]
         }
     },
@@ -160,7 +162,7 @@ def train_model(
                 _corrected_feat_selection_grid.append(i)
 
         param_grid["sel__k"] = _corrected_feat_selection_grid
-        # param_grid["sel__k"] = [60]
+        param_grid["sel__k"] = [60]
 
     # Create pipeline with feature selection and SVM
     pipeline = Pipeline([
