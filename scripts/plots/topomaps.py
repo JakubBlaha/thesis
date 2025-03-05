@@ -4,6 +4,15 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Circle, Arc
 import pandas as pd
 import re
+from matplotlib import rcParams
+import os
+
+script_dir = os.path.dirname(__file__)
+plots_dir = os.path.join(script_dir, '../data/plots')
+
+# Set global font to serif
+rcParams['font.family'] = 'serif'
+rcParams['font.serif'] = ['Times New Roman', 'DejaVu Serif', 'Serif']
 
 
 def plot_features_by_domain(selected_features, channel_names, info):
@@ -82,10 +91,14 @@ def plot_features_by_domain(selected_features, channel_names, info):
         print(f"{domain} electrodes: {electrodes}")
 
     # Create a figure and axes for plotting
-    fig, ax = plt.subplots(figsize=(6, 6))
+    fig, ax = plt.subplots(figsize=(5, 5))
 
     # Plot the sensors (black dots) with their labels
     mne.viz.plot_sensors(info, show_names=True, axes=ax, show=False)
+
+    # Update sensor label font to serif
+    for text in ax.texts:
+        text.set_fontfamily('serif')
 
     # Access the scatter plot of the sensors
     scatter = ax.collections[-1]
@@ -126,10 +139,11 @@ def plot_features_by_domain(selected_features, channel_names, info):
 
     # Add legend with improved appearance
     ax.legend(handles=legend_elements, loc='center', fontsize=12,
-              framealpha=0.7, title="Feature Domains", title_fontsize=13)
+              framealpha=0.7, title="Feature Domains", title_fontsize=13,
+              prop={'family': 'serif'})
 
-    plt.title("Features Grouped by Domain")
-    plt.tight_layout()
+    # Remove padding from figure
+    fig.tight_layout(pad=0)
 
     # Print summary of feature distribution
     print(f"\nFeature distribution:")
@@ -213,10 +227,14 @@ def plot_features_by_frequency(selected_features, channel_names, info):
             print(f"{band} band electrodes: {electrodes}")
 
     # Create a figure and axes for plotting
-    fig, ax = plt.subplots(figsize=(6, 6))
+    fig, ax = plt.subplots(figsize=(5, 5))
 
     # Plot the sensors (black dots) with their labels
     mne.viz.plot_sensors(info, show_names=True, axes=ax, show=False)
+
+    # Update sensor label font to serif
+    for text in ax.texts:
+        text.set_fontfamily('serif')
 
     # Access the scatter plot of the sensors
     scatter = ax.collections[-1]
@@ -260,10 +278,11 @@ def plot_features_by_frequency(selected_features, channel_names, info):
 
     # Add legend with improved appearance
     ax.legend(handles=legend_elements, loc='center', fontsize=12,
-              framealpha=0.7, title="Frequency Bands", title_fontsize=13)
+              framealpha=0.7, title="Frequency Bands", title_fontsize=13,
+              prop={'family': 'serif'})
 
-    plt.title("Features Grouped by Frequency Band")
-    plt.tight_layout()
+    # Remove padding from figure
+    fig.tight_layout(pad=0)
 
     # Print summary of feature distribution by frequency band
     print(f"\nFeature distribution by frequency band:")
@@ -300,9 +319,11 @@ if __name__ == "__main__":
     # Plot features by domain
     fig_domain = plot_features_by_domain(
         selected_features, channel_names, info)
+    fig_domain.savefig(os.path.join(plots_dir, 'features_by_domain.pdf'))
     plt.show()
 
     # Plot features by frequency band
     fig_freq = plot_features_by_frequency(
         selected_features, channel_names, info)
+    fig_freq.savefig(os.path.join(plots_dir, 'features_by_frequency.pdf'))
     plt.show()
