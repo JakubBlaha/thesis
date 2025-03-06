@@ -17,6 +17,8 @@ import matplotlib.pyplot as plt
 import torch.nn as nn
 
 from models.cnn import EEGNet
+from models.lstm import LSTMClassifier
+
 import random
 
 
@@ -212,21 +214,38 @@ def plot_training_results(train_losses, val_losses, train_acc, test_acc):
 
 # Global variables for parameters
 mode = "both"
-learning_rate = 0.000005
-batch_size = 16
-dropout = 0.4
-# class_weights = [1, 1, 1.3, 1]
-class_weights = None
-l1_lambda = 0.0000
+
+# Model type selection
+model_type = "lstm"  # Options: "cnn" or "lstm"
+
+# Model-specific configurations
+model_configs = {
+    "cnn": {
+        "learning_rate": 0.000005,
+        "batch_size": 16,
+        "dropout": 0.4,
+        "class_weights": None,  # [1, 1, 1.3, 1]
+        "l1_lambda": 0.0000,
+        "min_epochs": 12,
+        "max_epochs": 13
+    },
+    "lstm": {
+        "learning_rate": 0.0001,
+        "batch_size": 32,
+        "dropout": 0.3,
+        "class_weights": None,
+        "l1_lambda": 0.0001,
+        "min_epochs": 15,
+        "max_epochs": 20
+    }
+}
+
 seglen = 30
 merge_control = True
 oversample = True
 
 device = None
 use_gpu = True
-
-min_epochs = 12
-max_epochs = 13
 
 all_subj_ids = [
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
@@ -239,7 +258,10 @@ shuffled_ids = all_subj_ids.copy()
 random.shuffle(shuffled_ids)
 
 n_in_split = 5
-val_splits = [shuffled_ids[i:i+n_in_split] for i in range(0, len(shuffled_ids), n_in_split)]
+val_splits = [
+    shuffled_ids[i: i + n_in_split]
+    for i in range(0, len(shuffled_ids),
+                   n_in_split)]
 
 # classes = [
 #     [10, 14, 8, 9, 15, 18, 23],
@@ -250,10 +272,12 @@ val_splits = [[i] for i in all_subj_ids]
 
 
 def leave_subjects_out_cv(
-        model, *, test_subj_ids, labeling_scheme,
-        dataset_builder: DatasetBuilder, max_epochs=max_epochs,
-        min_epochs=min_epochs):
+        *, test_subj_ids, labeling_scheme,
+        dataset_builder: DatasetBuilder):
     print("Test subjects: ", test_subj_ids)
+
+    # Get current model config
+    config = model_configs[model_type]
 
     train, test = dataset_builder.build_deep_datasets_train_test(
         insert_ch_dim=False, test_subj_ids=test_subj_ids, device=device)
@@ -262,13 +286,31 @@ def leave_subjects_out_cv(
         return None
 
     num_classes = len(builder.last_int_to_label.keys())
-    model = EEGNet(num_classes=num_classes, dropout=dropout)
+
+    print(train[0][0].shape)
+
+    input_size = train[0][0].shape[1]
+
+    # Select model based on model_type
+    if model_type == "cnn":
+        model = EEGNet(num_classes=num_classes, dropout=config["dropout"])
+    elif model_type == "lstm":
+        model = LSTMClassifier(input_size=input_size, num_classes=num_classes,
+                               dropout=config["dropout"])
+    else:
+        raise ValueError(f"Unknown model type: {model_type}")
+
     model.to(device)
 
     return train_model(
-        model, train, test, max_epochs=max_epochs, learning_rate=learning_rate,
-        enable_profiling=False, batch_size=batch_size, min_epochs=min_epochs,
-        class_weights=class_weights, l1_lambda=l1_lambda)
+        model, train, test,
+        max_epochs=config["max_epochs"],
+        learning_rate=config["learning_rate"],
+        enable_profiling=False,
+        batch_size=config["batch_size"],
+        min_epochs=config["min_epochs"],
+        class_weights=config["class_weights"],
+        l1_lambda=config["l1_lambda"])
 
 
 def gen_conf_matrix(all_targets, all_predictions, int_to_label: dict):
@@ -300,11 +342,14 @@ if __name__ == "__main__":
     best_epochs = []
     group_test_accuracies = {}
 
+    config = model_configs[model_type]  # Get current model config
+
     for test_subjs in val_splits:
         seed()
 
         ret = leave_subjects_out_cv(
-            EEGNet, test_subj_ids=test_subjs, labeling_scheme=labeling_scheme,
+            test_subj_ids=test_subjs,
+            labeling_scheme=labeling_scheme,
             dataset_builder=builder)
 
         if ret is None:
@@ -322,7 +367,8 @@ if __name__ == "__main__":
                 all_accuracies[label] = []
             all_accuracies[label].append(_label_accuracies[label])
 
-        _best_epoch = np.argmax(_test_accuracies[min_epochs:]) + min_epochs
+        _best_epoch = np.argmax(
+            _test_accuracies[config["min_epochs"]:]) + config["min_epochs"]
         _best_accuracy = _test_accuracies[_best_epoch]
 
         best_epochs.append(_best_epoch)
@@ -363,9 +409,9 @@ if __name__ == "__main__":
     for group, accuracy in group_test_accuracies.items():
         print(f"Group {group}: {accuracy:.2f}")
 
-    # Print class weights
-    if class_weights is not None:
-        print("Class weights: ", class_weights)
+    # Print class weights from config
+    if config["class_weights"] is not None:
+        print("Class weights: ", config["class_weights"])
 
     print("Total splits: ", len(val_splits))
 

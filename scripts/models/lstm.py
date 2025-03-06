@@ -3,23 +3,37 @@ import torch.nn as nn
 
 class LSTMClassifier(nn.Module):
     def __init__(
-            self, input_size, hidden_size, num_layers, num_classes,
-            dropout=0.3):
+            self, *, input_size, num_classes, dropout):
         super(LSTMClassifier, self).__init__()
-        self.lstm = nn.LSTM(
-            input_size, hidden_size, num_layers, batch_first=True,
-            dropout=dropout)
-        self.fc = nn.Linear(hidden_size, num_classes)
+        # First LSTM layer with 64 units
+        self.lstm1 = nn.LSTM(
+            input_size, 64, batch_first=True)
+        self.dropout1 = nn.Dropout(dropout)
+
+        # Second LSTM layer with 32 units
+        self.lstm2 = nn.LSTM(
+            64, 32, batch_first=True)
+        self.dropout2 = nn.Dropout(dropout)
+
+        # Dense layers using Sequential
+        self.classifier = nn.Sequential(
+            nn.Linear(32, 16),
+            nn.ReLU(),
+            nn.Linear(16, num_classes)
+        )
 
     def forward(self, x):
-        lstm_out, _ = self.lstm(x)
-        out = self.fc(lstm_out[:, -1, :])
+        # First LSTM layer (return_sequences=True in Keras)
+        lstm1_out, _ = self.lstm1(x)
+        lstm1_out = self.dropout1(lstm1_out)
+
+        # Second LSTM layer (return_sequences=False in Keras)
+        lstm2_out, _ = self.lstm2(lstm1_out)
+        # Take only the last time step (equivalent to return_sequences=False)
+        lstm2_out = lstm2_out[:, -1, :]
+        lstm2_out = self.dropout2(lstm2_out)
+
+        # Pass through the sequential classifier
+        out = self.classifier(lstm2_out)
+
         return out
-
-
-input_size = 64
-hidden_size = 128
-num_layers = 2
-learning_rate = 0.001
-batch_size = 32
-epochs = 10
