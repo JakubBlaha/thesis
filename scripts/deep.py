@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 import torch.nn as nn
 
 from models.cnn import EEGNet
-from models.lstm import LSTMClassifier
+from models.lstm import EEG_LSTMClassifier
 
 import random
 
@@ -230,13 +230,13 @@ model_configs = {
         "max_epochs": 13
     },
     "lstm": {
-        "learning_rate": 0.0001,
+        "learning_rate": 0.0005,
         "batch_size": 32,
-        "dropout": 0.3,
+        "dropout": 0,
         "class_weights": None,
-        "l1_lambda": 0.0001,
+        "l1_lambda": 0.0000,
         "min_epochs": 15,
-        "max_epochs": 20
+        "max_epochs": 50
     }
 }
 
@@ -268,7 +268,7 @@ val_splits = [
 #     [11, 13, 21, 1, 2, 3, 4, 5, 6, 7, 12, 16, 17, 19, 20, 22],
 # ]
 
-val_splits = [[i] for i in all_subj_ids]
+# val_splits = [[i] for i in all_subj_ids]
 
 
 def leave_subjects_out_cv(
@@ -287,16 +287,15 @@ def leave_subjects_out_cv(
 
     num_classes = len(builder.last_int_to_label.keys())
 
-    print(train[0][0].shape)
-
-    input_size = train[0][0].shape[1]
-
     # Select model based on model_type
     if model_type == "cnn":
         model = EEGNet(num_classes=num_classes, dropout=config["dropout"])
     elif model_type == "lstm":
-        model = LSTMClassifier(input_size=input_size, num_classes=num_classes,
-                               dropout=config["dropout"])
+        model = EEG_LSTMClassifier(input_size=14, num_classes=num_classes,
+                                   dropout=config["dropout"],
+                                   hidden_sizes=[45, 30],
+                                   bidirectional=False,
+                                   use_attention=True)
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
