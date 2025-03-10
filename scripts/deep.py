@@ -25,6 +25,8 @@ from models.lstm import EEG_LSTMClassifier
 
 import random
 
+TEST_RUN = False
+
 # Define LSTM parameters globally
 lstm_params = {
     "input_size": 14,
@@ -33,9 +35,10 @@ lstm_params = {
     "use_attention": False
 }
 
-seglen = 10
+# Global variables for parameters
 merge_control = True
 oversample = True
+mode = "both"
 
 device = None
 use_gpu = True
@@ -56,9 +59,8 @@ val_splits = [
     for i in range(0, len(shuffled_ids),
                    n_in_split)]
 
-test_run = False
 
-if test_run:
+if TEST_RUN:
     lstm_params['hidden_sizes'] = [1]
 
 
@@ -252,12 +254,6 @@ def plot_training_results(train_losses, val_losses, train_acc, test_acc):
     plt.show()
 
 
-# Global variables for parameters
-mode = "both"
-
-# Model type selection
-model_type = "lstm"  # Options: "cnn" or "lstm"
-
 # Model-specific configurations
 model_configs = {
     "cnn": {
@@ -272,18 +268,18 @@ model_configs = {
     "lstm": {
         "learning_rate": 0.0005,
         "batch_size": 32,
-        "dropout": 0,
+        "dropout": 0.3,
         "class_weights": None,
         "l1_lambda": 0.0000,
-        "min_epochs": 15,
-        "max_epochs": 50
+        "min_epochs": 5,
+        "max_epochs": 30
     }
 }
 
 
 def leave_subjects_out_cv(
         *, test_subj_ids, labeling_scheme,
-        dataset_builder: DatasetBuilder):
+        dataset_builder: DatasetBuilder, model_type):
     print("Test subjects: ", test_subj_ids)
 
     # Get current model config
@@ -295,7 +291,7 @@ def leave_subjects_out_cv(
     if len(test) == 0:
         return None
 
-    num_classes = len(builder.last_int_to_label.keys())
+    num_classes = len(dataset_builder.last_int_to_label.keys())
 
     # Select model based on model_type
     if model_type == "cnn":
@@ -335,7 +331,8 @@ def gen_conf_matrix(all_targets, all_predictions, int_to_label: dict):
 
 def save_results_to_csv(
         *, mean_accuracy, mean_test_loss, max_best_epoch, mean_best_epoch,
-        group_test_accuracies, model_config, int_to_label):
+        group_test_accuracies, model_config, int_to_label, seglen_value,
+        model_type):
     # Create directory if it doesn't exist
     result_dir = os.path.join(
         os.path.dirname(os.path.dirname(__file__)),
@@ -351,7 +348,7 @@ def save_results_to_csv(
     row_data = {
         'timestamp': timestamp, 'mean_accuracy': mean_accuracy,
         'mean_test_loss': mean_test_loss, 'max_best_epoch': max_best_epoch,
-        'mean_best_epoch': mean_best_epoch, 'seglen': seglen,
+        'mean_best_epoch': mean_best_epoch, 'seglen': seglen_value,
         'merge_control': merge_control, 'oversample': oversample,
         'n_in_split': n_in_split, 'model_type': model_type,
         'int_to_label': json.dumps(
@@ -380,7 +377,14 @@ def save_results_to_csv(
     print(f"Results saved to {csv_filepath}")
 
 
-if __name__ == "__main__":
+def run_deep_learning(seglen=10, model_type_param="lstm"):
+    """
+    Run the deep learning process with the specified parameters.
+
+    Args:
+        seglen_param: Segment length in seconds
+        model_type_param: Model type ('lstm' or 'cnn')
+    """
     setup_device()
 
     # Build dataset
@@ -396,7 +400,7 @@ if __name__ == "__main__":
     best_epochs = []
     group_test_accuracies = {}
 
-    config = model_configs[model_type]  # Get current model config
+    config = model_configs[model_type_param]  # Get current model config
 
     for test_subjs in val_splits:
         seed()
@@ -404,7 +408,8 @@ if __name__ == "__main__":
         ret = leave_subjects_out_cv(
             test_subj_ids=test_subjs,
             labeling_scheme=labeling_scheme,
-            dataset_builder=builder)
+            dataset_builder=builder,
+            model_type=model_type_param)
 
         if ret is None:
             continue
@@ -433,7 +438,7 @@ if __name__ == "__main__":
 
         group_test_accuracies[tuple(test_subjs)] = _best_accuracy
 
-        if test_run:
+        if TEST_RUN:
             break
 
     # Statistics
@@ -458,7 +463,9 @@ if __name__ == "__main__":
         mean_best_epoch=mean_best_epoch,
         group_test_accuracies=group_test_accuracies,
         model_config=config,
-        int_to_label=builder.last_int_to_label
+        int_to_label=builder.last_int_to_label,
+        seglen_value=seglen,
+        model_type=model_type_param
     )
 
     # Conf matrix
@@ -484,3 +491,12 @@ if __name__ == "__main__":
     print("Total splits: ", len(val_splits))
 
     print("Script execution finished.")
+
+
+if __name__ == "__main__":
+    # seglens = [1, 2, 3, 5]
+    seglens = [1, 2, 3, 5, 10, 15, 30]
+    # seglens = [10]
+
+    for seglen in seglens:
+        run_deep_learning(seglen=seglen)
