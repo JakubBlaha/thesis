@@ -15,11 +15,51 @@ from sklearn.metrics import confusion_matrix
 import seaborn as sns
 import matplotlib.pyplot as plt
 import torch.nn as nn
+import os
+import csv
+from datetime import datetime
+import json
 
 from models.cnn import EEGNet
 from models.lstm import EEG_LSTMClassifier
 
 import random
+
+# Define LSTM parameters globally
+lstm_params = {
+    "input_size": 14,
+    "hidden_sizes": [45, 30],
+    "bidirectional": False,
+    "use_attention": False
+}
+
+seglen = 10
+merge_control = True
+oversample = True
+
+device = None
+use_gpu = True
+
+all_subj_ids = [
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+    22, 23, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113,
+    114, 115, 116, 117, 118, 119, 120, 121, 401, 402, 403, 404, 405, 406, 407,
+    408, 409, 410, 411, 412, 413, 414, 415, 416, 417, 418, 419, 420, 421]
+
+random.seed(42)
+shuffled_ids = all_subj_ids.copy()
+random.shuffle(shuffled_ids)
+
+n_in_split = 5
+val_splits = [
+    shuffled_ids[i: i + n_in_split]
+    for i in range(0, len(shuffled_ids),
+                   n_in_split)]
+
+test_run = False
+
+if test_run:
+    lstm_params['hidden_sizes'] = [1]
 
 
 def compile_model(
@@ -240,36 +280,6 @@ model_configs = {
     }
 }
 
-seglen = 30
-merge_control = True
-oversample = True
-
-device = None
-use_gpu = True
-
-all_subj_ids = [
-    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
-    22, 23, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113,
-    114, 115, 116, 117, 118, 119, 120, 121, 401, 402, 403, 404, 405, 406, 407,
-    408, 409, 410, 411, 412, 413, 414, 415, 416, 417, 418, 419, 420, 421]
-
-random.seed(42)
-shuffled_ids = all_subj_ids.copy()
-random.shuffle(shuffled_ids)
-
-n_in_split = 5
-val_splits = [
-    shuffled_ids[i: i + n_in_split]
-    for i in range(0, len(shuffled_ids),
-                   n_in_split)]
-
-# classes = [
-#     [10, 14, 8, 9, 15, 18, 23],
-#     [11, 13, 21, 1, 2, 3, 4, 5, 6, 7, 12, 16, 17, 19, 20, 22],
-# ]
-
-# val_splits = [[i] for i in all_subj_ids]
-
 
 def leave_subjects_out_cv(
         *, test_subj_ids, labeling_scheme,
@@ -291,11 +301,9 @@ def leave_subjects_out_cv(
     if model_type == "cnn":
         model = EEGNet(num_classes=num_classes, dropout=config["dropout"])
     elif model_type == "lstm":
-        model = EEG_LSTMClassifier(input_size=14, num_classes=num_classes,
+        model = EEG_LSTMClassifier(num_classes=num_classes,
                                    dropout=config["dropout"],
-                                   hidden_sizes=[45, 30],
-                                   bidirectional=False,
-                                   use_attention=True)
+                                   **lstm_params)
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
@@ -323,6 +331,53 @@ def gen_conf_matrix(all_targets, all_predictions, int_to_label: dict):
     plt.ylabel("True Labels")
     plt.title("Confusion Matrix")
     plt.show()
+
+
+def save_results_to_csv(
+        *, mean_accuracy, mean_test_loss, max_best_epoch, mean_best_epoch,
+        group_test_accuracies, model_config, int_to_label):
+    # Create directory if it doesn't exist
+    result_dir = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)),
+        'data', 'results')
+    os.makedirs(result_dir, exist_ok=True)
+
+    # Create timestamp for filenames
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    csv_filename = f"deep_{timestamp}.csv"
+    csv_filepath = os.path.join(result_dir, csv_filename)
+
+    # Prepare row data
+    row_data = {
+        'timestamp': timestamp, 'mean_accuracy': mean_accuracy,
+        'mean_test_loss': mean_test_loss, 'max_best_epoch': max_best_epoch,
+        'mean_best_epoch': mean_best_epoch, 'seglen': seglen,
+        'merge_control': merge_control, 'oversample': oversample,
+        'n_in_split': n_in_split, 'model_type': model_type,
+        'int_to_label': json.dumps(
+            {str(k): v for k, v in int_to_label.items()})}
+
+    # Add model config values
+    for key, value in model_config.items():
+        row_data[f"model_config_{key}"] = json.dumps(
+            value) if isinstance(value, (list, dict, tuple)) else value
+
+    # Add LSTM param values
+    for key, value in lstm_params.items():
+        row_data[f"lstm_{key}"] = json.dumps(value) if isinstance(
+            value, (list, dict, tuple)) else value
+
+    # Add group accuracies values
+    for group, acc in group_test_accuracies.items():
+        row_data[f"group_{str(group)}"] = acc
+
+    # Write to CSV
+    with open(csv_filepath, 'w', newline='') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=row_data.keys())
+        writer.writeheader()
+        writer.writerow(row_data)
+
+    print(f"Results saved to {csv_filepath}")
 
 
 if __name__ == "__main__":
@@ -378,6 +433,9 @@ if __name__ == "__main__":
 
         group_test_accuracies[tuple(test_subjs)] = _best_accuracy
 
+        if test_run:
+            break
+
     # Statistics
     total_test_acc = np.mean(np.array(all_predictions)
                              == np.array(all_targets))
@@ -391,6 +449,17 @@ if __name__ == "__main__":
     max_best_epoch = np.max(best_epochs)
     print(f"Mean Best Epoch: {mean_best_epoch}")
     print(f"Max Best Epoch: {max_best_epoch}")
+
+    # Save results to CSV
+    save_results_to_csv(
+        mean_accuracy=total_test_acc,
+        mean_test_loss=total_test_loss,
+        max_best_epoch=max_best_epoch,
+        mean_best_epoch=mean_best_epoch,
+        group_test_accuracies=group_test_accuracies,
+        model_config=config,
+        int_to_label=builder.last_int_to_label
+    )
 
     # Conf matrix
     gen_conf_matrix(all_targets, all_predictions, builder.last_int_to_label)
