@@ -28,7 +28,7 @@ import random
 TEST_RUN = False
 
 # Define LSTM parameters globally
-lstm_enhanced = False
+lstm_enhanced = True
 
 lstm_params = {
     "input_size": 14,
@@ -406,7 +406,7 @@ def save_results_to_csv(
     print(f"Results saved to {csv_filepath}")
 
 
-def run_deep_learning(seglen=10, model_type_param="lstm"):
+def run_deep_learning(seglen: int, model_type_param: str):
     """
     Run the deep learning process with the specified parameters.
 
@@ -415,6 +415,11 @@ def run_deep_learning(seglen=10, model_type_param="lstm"):
         model_type_param: Model type ('lstm' or 'cnn')
     """
     setup_device()
+
+    print(f"\n{'='*50}")
+    print(
+        f"Starting deep learning with seglen = {seglen}s, model = {model_type_param}")
+    print(f"{'='*50}\n")
 
     # Build dataset
     labeling_scheme = LabelingScheme(
@@ -437,7 +442,8 @@ def run_deep_learning(seglen=10, model_type_param="lstm"):
 
     config = model_configs[model_type_param]  # Get current model config
 
-    for test_subjs in val_splits:
+    total_splits = len(val_splits)
+    for split_idx, test_subjs in enumerate(val_splits):
         seed()
 
         ret = leave_subjects_out_cv(
@@ -483,6 +489,8 @@ def run_deep_learning(seglen=10, model_type_param="lstm"):
         print("Macro precision: ", _macro_precision)
         print("Macro recall: ", _macro_recall)
         print("Macro F1: ", _macro_f1)
+        print(
+            f"Progress: {split_idx+1}/{total_splits} folds completed for seglen={seglen}s")
         print("----------------")
 
         group_test_accuracies[tuple(test_subjs)] = _best_accuracy
@@ -559,7 +567,7 @@ def run_deep_learning(seglen=10, model_type_param="lstm"):
 if __name__ == "__main__":
     # seglens = [1, 2, 3, 5]
     # seglens = [3, 5, 10, 15, 30]
-    seglens = [1]
+    seglens = [30]
 
     for seglen in seglens:
-        run_deep_learning(seglen=seglen)
+        run_deep_learning(seglen=seglen, model_type_param="cnn")
