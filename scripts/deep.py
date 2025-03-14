@@ -10,8 +10,7 @@ from tqdm.notebook import tqdm
 from torch.utils.data import DataLoader
 from torch.profiler import profile, record_function, ProfilerActivity
 import contextlib
-from tabulate import tabulate
-from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score
+from sklearn.metrics import confusion_matrix
 import seaborn as sns
 import matplotlib.pyplot as plt
 import torch.nn as nn
