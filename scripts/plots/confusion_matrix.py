@@ -8,10 +8,11 @@ import os
 plot_dir = os.path.join(
     os.path.dirname(__file__),
     '..', '..', 'data', 'plots')
+os.makedirs(plot_dir, exist_ok=True)
 
 
 def plot_confusion_matrix(conf_matrix, class_labels, title=None,
-                          cmap='Blues', figsize=(8, 6),
+                          cmap='Blues', figsize=(5, 4),
                           annot=True, fmt='d'):
     """
     Plot a confusion matrix using heatmap.
