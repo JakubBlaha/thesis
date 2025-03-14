@@ -30,20 +30,21 @@ TEST_RUN = False
 # Define LSTM parameters globally
 lstm_enhanced = True
 
-lstm_params = {
-    "input_size": 14,
-    "hidden_sizes": [45, 30],
-    "bidirectional": lstm_enhanced,
-    "use_attention": lstm_enhanced
-}
-
-# Global variables for parameters
+# Global control variables
+show_plots = False
 merge_control = True
 oversample = True
 mode = "both"
 
 device = None
 use_gpu = True
+
+lstm_params = {
+    "input_size": 14,
+    "hidden_sizes": [45, 30],
+    "bidirectional": lstm_enhanced,
+    "use_attention": lstm_enhanced
+}
 
 all_subj_ids = [
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
@@ -84,62 +85,16 @@ def evaluate_model(model, test_loader, criterion):
 
     all_predictions = []
     all_targets = []
-    losses_ = []
 
     with torch.no_grad():
         for data, targets in test_loader:
             scores = model.forward(data)
-            loss = criterion(scores, targets)
-            losses_.append(loss.detach())
             _, predictions = scores.max(1)
 
             all_predictions.extend(predictions.cpu().numpy())
             all_targets.extend(targets.cpu().numpy())
 
-    avg_loss = torch.stack(losses_).mean().item()
-
-    # Calculate accuracy per label
-    label_accuracies = {}
-    label_precisions = {}
-    label_recalls = {}
-    label_f1scores = {}
-
-    # Get unique labels in targets
-    unique_labels = set(all_targets)
-
-    # Calculate metrics per label
-    for label in unique_labels:
-        # Calculate accuracy
-        label_indices = [i for i, target in enumerate(
-            all_targets) if target == label]
-        label_predictions = [all_predictions[i] for i in label_indices]
-        correct_predictions = sum(
-            1 for pred in label_predictions if pred == label)
-        accuracy = correct_predictions / len(
-            label_predictions) if len(label_predictions) > 0 else 0
-        label_accuracies[label] = accuracy
-
-        # Calculate precision, recall, and f1 using binary classification approach for each class
-        y_true = [1 if t == label else 0 for t in all_targets]
-        y_pred = [1 if p == label else 0 for p in all_predictions]
-
-        # Handle potential division by zero
-        label_precisions[label] = precision_score(
-            y_true, y_pred, zero_division=0)
-        label_recalls[label] = recall_score(y_true, y_pred, zero_division=0)
-        label_f1scores[label] = f1_score(y_true, y_pred, zero_division=0)
-
-    # Calculate macro averages
-    macro_precision = sum(label_precisions.values(
-    )) / len(label_precisions) if label_precisions else 0
-    macro_recall = sum(label_recalls.values()
-                       ) / len(label_recalls) if label_recalls else 0
-    macro_f1 = sum(label_f1scores.values()
-                   ) / len(label_f1scores) if label_f1scores else 0
-
-    return (avg_loss, all_predictions, all_targets, label_accuracies,
-            label_precisions, label_recalls, label_f1scores,
-            macro_precision, macro_recall, macro_f1)
+    return all_predictions, all_targets
 
 
 def train_model(
@@ -207,9 +162,10 @@ def train_model(
             train_acc.append(num_correct/num_samples)
 
             # Evaluate
-            val_loss, all_predictions, all_targets, _, _, _, _, _, _, _ = evaluate_model(
+            all_predictions, all_targets = evaluate_model(
                 model, test_loader, criterion)
-            val_losses.append(val_loss)
+            # Placeholder since we no longer calculate loss
+            val_losses.append(0)
             test_acc.append(
                 np.mean(np.array(all_predictions) == np.array(all_targets)))
 
@@ -243,7 +199,9 @@ def train_model(
     if best_state_dict is not None:
         model.load_state_dict(best_state_dict)
 
-    return evaluate_model(model, test_loader, nn.CrossEntropyLoss()), test_acc
+    all_predictions, all_targets = evaluate_model(
+        model, test_loader, nn.CrossEntropyLoss())
+    return (all_predictions, all_targets), test_acc
 
 
 def seed():
@@ -265,6 +223,9 @@ def setup_device():
 
 
 def plot_training_results(train_losses, val_losses, train_acc, test_acc):
+    if not show_plots:
+        return
+
     # Plotting with seaborn
     fig, axs = plt.subplots(1, 2, figsize=(20, 5))
     configs = [
@@ -348,6 +309,9 @@ def leave_subjects_out_cv(
 
 
 def gen_conf_matrix(all_targets, all_predictions, int_to_label: dict):
+    if not show_plots:
+        return
+
     conf_matrix = confusion_matrix(all_targets, all_predictions)
     uniq_labels_names = [int_to_label[i] for i in sorted(int_to_label.keys())]
 
@@ -361,9 +325,9 @@ def gen_conf_matrix(all_targets, all_predictions, int_to_label: dict):
 
 
 def save_results_to_csv(
-        *, mean_accuracy, mean_test_loss, max_best_epoch, mean_best_epoch,
-        model_config, int_to_label, seglen_value,
-        model_type, macro_precision, macro_recall, macro_f1):
+        *, mean_accuracy, mean_test_loss=None, max_best_epoch=None,
+        mean_best_epoch=None, model_config=None,
+        seglen_value=None, model_type=None):
     # Create directory if it doesn't exist
     result_dir = os.path.join(
         os.path.dirname(os.path.dirname(__file__)),
@@ -382,15 +346,13 @@ def save_results_to_csv(
         'mean_best_epoch': mean_best_epoch, 'seglen': seglen_value,
         'merge_control': merge_control, 'oversample': oversample,
         'n_in_split': n_in_split, 'model_type': model_type,
-        'macro_precision': macro_precision, 'macro_recall': macro_recall,
-        'macro_f1': macro_f1,
-        'int_to_label': json.dumps(
-            {str(k): v for k, v in int_to_label.items()})}
+    }
 
     # Add model config values
-    for key, value in model_config.items():
-        row_data[f"model_config_{key}"] = json.dumps(
-            value) if isinstance(value, (list, dict, tuple)) else value
+    if model_config:
+        for key, value in model_config.items():
+            row_data[f"model_config_{key}"] = json.dumps(
+                value) if isinstance(value, (list, dict, tuple)) else value
 
     # Add LSTM param values
     for key, value in lstm_params.items():
@@ -427,18 +389,9 @@ def run_deep_learning(seglen: int, model_type_param: str):
     builder = DatasetBuilder(
         labeling_scheme, seglen=seglen, mode=mode, oversample=oversample)
 
-    test_losses = []
     all_predictions = []
     all_targets = []
-    all_accuracies = {}
-    all_precisions = {}
-    all_recalls = {}
-    all_f1scores = {}
-    macro_precisions = []
-    macro_recalls = []
-    macro_f1s = []
     best_epochs = []
-    group_test_accuracies = {}
 
     config = model_configs[model_type_param]  # Get current model config
 
@@ -455,28 +408,10 @@ def run_deep_learning(seglen: int, model_type_param: str):
         if ret is None:
             continue
 
-        (_test_loss, _all_predictions, _all_targets,
-         _label_accuracies, _label_precisions, _label_recalls, _label_f1scores,
-         _macro_precision, _macro_recall, _macro_f1), _test_accuracies = ret
+        (_all_predictions, _all_targets), _test_accuracies = ret
 
-        test_losses.append(_test_loss)
         all_predictions.extend(_all_predictions)
         all_targets.extend(_all_targets)
-        macro_precisions.append(_macro_precision)
-        macro_recalls.append(_macro_recall)
-        macro_f1s.append(_macro_f1)
-
-        for label in set(_label_accuracies.keys()):
-            if label not in all_accuracies:
-                all_accuracies[label] = []
-                all_precisions[label] = []
-                all_recalls[label] = []
-                all_f1scores[label] = []
-
-            all_accuracies[label].append(_label_accuracies[label])
-            all_precisions[label].append(_label_precisions.get(label, 0))
-            all_recalls[label].append(_label_recalls.get(label, 0))
-            all_f1scores[label].append(_label_f1scores.get(label, 0))
 
         _best_epoch = np.argmax(
             _test_accuracies[config["min_epochs"]:]) + config["min_epochs"]
@@ -486,14 +421,9 @@ def run_deep_learning(seglen: int, model_type_param: str):
 
         print(f"Best epoch: {_best_epoch}")
         print("Best accuracy: ", _best_accuracy)
-        print("Macro precision: ", _macro_precision)
-        print("Macro recall: ", _macro_recall)
-        print("Macro F1: ", _macro_f1)
         print(
             f"Progress: {split_idx+1}/{total_splits} folds completed for seglen={seglen}s")
         print("----------------")
-
-        group_test_accuracies[tuple(test_subjs)] = _best_accuracy
 
         if TEST_RUN:
             break
@@ -501,22 +431,6 @@ def run_deep_learning(seglen: int, model_type_param: str):
     # Statistics
     total_test_acc = np.mean(np.array(all_predictions)
                              == np.array(all_targets))
-    total_test_loss = np.mean(test_losses)
-    avg_all_accuracies = {k: np.mean(v) for k, v in all_accuracies.items()}
-    avg_all_precisions = {k: np.mean(v) for k, v in all_precisions.items()}
-    avg_all_recalls = {k: np.mean(v) for k, v in all_recalls.items()}
-    avg_all_f1scores = {k: np.mean(v) for k, v in all_f1scores.items()}
-
-    # Calculate average macro metrics across all splits
-    avg_macro_precision = np.mean(macro_precisions)
-    avg_macro_recall = np.mean(macro_recalls)
-    avg_macro_f1 = np.mean(macro_f1s)
-
-    print(f"Mean Test Loss: {total_test_loss}")
-    print(f"Mean Test Accuracy: {total_test_acc}")
-    print(f"Mean Macro Precision: {avg_macro_precision}")
-    print(f"Mean Macro Recall: {avg_macro_recall}")
-    print(f"Mean Macro F1: {avg_macro_f1}")
 
     # Calculate mean and max of best epochs
     mean_best_epoch = np.mean(best_epochs)
@@ -527,41 +441,39 @@ def run_deep_learning(seglen: int, model_type_param: str):
     # Save results to CSV
     save_results_to_csv(
         mean_accuracy=total_test_acc,
-        mean_test_loss=total_test_loss,
         max_best_epoch=max_best_epoch,
         mean_best_epoch=mean_best_epoch,
         model_config=config,
-        int_to_label=builder.last_int_to_label,
         seglen_value=seglen,
-        model_type=model_type_param,
-        macro_precision=avg_macro_precision,
-        macro_recall=avg_macro_recall,
-        macro_f1=avg_macro_f1
+        model_type=model_type_param
     )
 
     # Conf matrix
     gen_conf_matrix(all_targets, all_predictions, builder.last_int_to_label)
 
-    # Print metrics per class
-    print("\nClass Metrics:")
-    metrics = []
+    # Save predictions to CSV
+    result_dir = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)),
+        'data', 'results')
+    os.makedirs(result_dir, exist_ok=True)
 
-    for label in sorted(avg_all_accuracies.keys()):
-        class_name = builder.last_int_to_label[label]
-        metrics.append([
-            class_name,
-            avg_all_accuracies.get(label, 0),
-            avg_all_precisions.get(label, 0),
-            avg_all_recalls.get(label, 0),
-            avg_all_f1scores.get(label, 0)
-        ])
+    # Use the same timestamp format as in save_results_to_csv
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    predictions_filename = f"deep_{timestamp}_predictions.csv"
+    predictions_filepath = os.path.join(result_dir, predictions_filename)
 
-    print(tabulate(
-        metrics,
-        headers=['Class', 'Accuracy', 'Precision', 'Recall', 'F1-Score']))
+    # Create a dataframe with predictions and actual labels
+    with open(predictions_filepath, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(['predicted', 'actual'])
+        for pred, actual in zip(all_predictions, all_targets):
+            pred_ = builder.last_int_to_label[pred]
+            actual_ = builder.last_int_to_label[actual]
+            writer.writerow([pred_, actual_])
 
-    print("Total splits: ", len(val_splits))
-    print("Script execution finished.")
+    print(f"Predictions saved to {predictions_filepath}")
+
+    print("\nScript execution finished.")
 
 
 if __name__ == "__main__":
