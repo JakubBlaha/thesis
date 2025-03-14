@@ -72,7 +72,7 @@ def plot_confusion_matrix(conf_matrix, class_labels, title=None,
 
 
 # %%
-# LSTM final enhanced
+# Enhanced LSTM
 labels = ['GAD', 'SAD', 'Control']
 conf_matrix = [
     [1491,   83,  744],
@@ -80,27 +80,30 @@ conf_matrix = [
     [876, 1150, 1335]
 ]
 
-fig, ax = plot_confusion_matrix(conf_matrix, labels)
+fig, ax = plot_confusion_matrix(
+    conf_matrix, labels, title='Enhanced LSTM Model')
 plt.savefig(os.path.join(plot_dir, 'conf_matrix_lstm_final_enhanced.pdf'))
 
 # %%
-# LSTM final
+# Basic LSTM
 conf_matrix = [
     [1411,  429,  478],
     [78, 2056,  266],
     [1016, 2063,  282]
 ]
 
-fig, ax = plot_confusion_matrix(conf_matrix, labels)
+fig, ax = plot_confusion_matrix(conf_matrix, labels, title='Basic LSTM Model')
 plt.savefig(os.path.join(plot_dir, 'conf_matrix_lstm_final.pdf'))
 
 # %%
-# CNN final
+# CNN
 conf_matrix = [
     [41,  3,  40],
     [0, 59,  23],
     [14, 20,  88]
 ]
 
-fig, ax = plot_confusion_matrix(conf_matrix, labels)
+fig, ax = plot_confusion_matrix(conf_matrix, labels, title='CNN Model')
 plt.savefig(os.path.join(plot_dir, 'conf_matrix_cnn_final.pdf'))
+
+# %%
