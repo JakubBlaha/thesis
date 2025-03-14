@@ -143,9 +143,11 @@ def main(file_path, title='Confusion Matrix'):
     fig, ax = plot_confusion_matrix(
         reordered_conf_matrix, labels, title=title)
     fname = f'conf_matrix__{title.lower().replace(" ", "_")}.pdf'
-    path = os.path.join(plots_dir, fname)
+    path = os.path.abspath(os.path.join(plots_dir, fname))
 
-    print(path)
+    print()
+    print(f"Saving confusion matrix plot to: {path}")
+    print("  " + path)
 
     plt.savefig(os.path.join(plots_dir, fname))
 
