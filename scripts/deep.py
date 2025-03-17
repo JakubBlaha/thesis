@@ -27,7 +27,7 @@ import random
 TEST_RUN = False
 
 # Define LSTM parameters globally
-lstm_enhanced = True
+lstm_enhanced = False
 
 # Global control variables
 show_plots = False
@@ -253,8 +253,8 @@ model_configs = {
         "dropout": 0.4,
         "class_weights": None,  # [1, 1, 1.3, 1]
         "l1_lambda": 0.0000,
-        "min_epochs": 12,
-        "max_epochs": 13
+        "min_epochs": 11,
+        "max_epochs": 12
     },
     "lstm": {
         "learning_rate": 0.0005,
@@ -262,8 +262,8 @@ model_configs = {
         "dropout": 0.4,
         "class_weights": None,
         "l1_lambda": 0.0000,
-        "min_epochs": 7,
-        "max_epochs": 8
+        "min_epochs": 6,
+        "max_epochs": 7
     }
 }
 
@@ -478,7 +478,7 @@ def run_deep_learning(seglen: int, model_type_param: str):
 if __name__ == "__main__":
     # seglens = [1, 2, 3, 5]
     # seglens = [3, 5, 10, 15, 30]
-    seglens = [30]
+    seglens = [1]
 
     for seglen in seglens:
-        run_deep_learning(seglen=seglen, model_type_param="cnn")
+        run_deep_learning(seglen=seglen, model_type_param="lstm")

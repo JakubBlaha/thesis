@@ -17,8 +17,6 @@ from constants import features_dir
 script_path = os.path.dirname(os.path.realpath(__file__))
 
 
-
-
 def get_extracted_seglens():
     paths = glob.glob(os.path.join(features_dir, 'features_*s.csv'))
     basenames = [os.path.basename(i) for i in paths]
@@ -98,7 +96,10 @@ class DatasetBuilder:
     _feat_names: list[str] = []
     _feat_domain_prefix = ['time', 'abs_pow', 'rel_pow', 'conn', 'ai']
 
-    def __init__(self, labeling_scheme: LabelingScheme, seglen: int, mode="both", oversample=True, debug=False) -> None:
+    last_int_to_label: dict[int, str] = {}
+
+    def __init__(self, labeling_scheme: LabelingScheme, seglen: int,
+                 mode="both", oversample=True, debug=False) -> None:
         self._validate_mode(mode)
 
         self._labeling_scheme = labeling_scheme
@@ -110,7 +111,7 @@ class DatasetBuilder:
 
     def _drop_redundant_columns(self, df: pd.DataFrame) -> pd.DataFrame:
         return df.drop(columns=['dataset', 'ham', 'sam', 'stai', 'subject'])
-    
+
     def _get_seglen_df(self) -> pd.DataFrame:
         path = get_feats_csv_path(self.seglen)
         df = pd.read_csv(path)
@@ -139,8 +140,9 @@ class DatasetBuilder:
         self._feat_names = df.columns.tolist()[:-2]
 
         return df
-    
-    def build_dataset_feats_labels_groups_df(self, domains: list[str] | None = None, p_val_thresh=None):
+
+    def build_dataset_feats_labels_groups_df(
+            self, domains: list[str] | None = None, p_val_thresh=None):
         df = self.build_dataset_df(domains, p_val_thresh)
 
         group_encoder = LabelEncoder()
@@ -154,7 +156,8 @@ class DatasetBuilder:
 
         features = df.to_numpy()
 
-        int_to_label = {i: label for i, label in enumerate(label_encoder.classes_)}
+        int_to_label = {i: label for i,
+                        label in enumerate(label_encoder.classes_)}
         label_to_int = {label: i for i, label in int_to_label.items()}
 
         if self.debug:
@@ -163,7 +166,9 @@ class DatasetBuilder:
         # Match control class sample count
         if self.oversample and self._labeling_scheme.merge_control and self.mode == "both":
             features, labels, groups = random_oversample(
-                features, labels, groups, oversample_labels=[label_to_int["LO_GAD"], label_to_int["LO_SAD"]])
+                features, labels, groups,
+                oversample_labels=[label_to_int["LO_GAD"],
+                                   label_to_int["LO_SAD"]])
 
             if self.debug:
                 self._output_label_counts(labels, int_to_label)
@@ -173,6 +178,7 @@ class DatasetBuilder:
             lo_sad = label_encoder.transform(["LO_SAD"])[0]
 
             control = min(lo_gad, lo_sad)
+            int_to_label[control] = "CONTROL"
 
             labels[(labels == lo_gad) | (labels == lo_sad)] = control
 
@@ -182,6 +188,8 @@ class DatasetBuilder:
         if self.oversample:
             features, labels, groups = random_oversample(
                 features, labels, groups)
+
+        self.last_int_to_label = int_to_label
 
         return features, labels, groups, df
 
@@ -195,9 +203,9 @@ class DatasetBuilder:
         for d in domains:
             if d not in self._feat_domain_prefix:
                 raise ValueError(f'Invalid domain: {d}')
-            
+
         filtered_domains = domains.copy()
-        
+
         if len(filtered_domains) == 0:
             filtered_domains += ["time", "rel_pow", "conn", "ai"]
 
@@ -244,7 +252,7 @@ class DatasetBuilder:
                 df = df.drop(columns=[col])
 
         return df
-    
+
     def _validate_mode(self, mode: str):
         _valid_modes = ["both", "dasps", "sad"]
 
@@ -311,7 +319,7 @@ class DatasetBuilder:
             return "HI_SAD"
 
         raise ValueError(f'Invalid SAD severity: {severity}')
-    
+
     def _get_segment_files(self):
         clean_segdir_path = os.path.join(
             script_path, f'../data/segmented/{self.seglen}s/clean')
@@ -319,7 +327,7 @@ class DatasetBuilder:
         files = sorted(files)
 
         return files
-    
+
     def _get_subj_id_from_path(self, path: str) -> int:
         return int(os.path.basename(path).strip('-epo.fif').strip('S'))
 
@@ -398,7 +406,8 @@ class DatasetBuilder:
         groups = self._preloaded_data['groups']
 
         if len(data) == 0:
-            raise ValueError("No epochs found. Make sure there is data to be loaded.")
+            raise ValueError(
+                "No epochs found. Make sure there is data to be loaded.")
 
         test_mask = np.isin(groups, test_subj_ids)
 
@@ -411,10 +420,12 @@ class DatasetBuilder:
         train_groups = groups[~test_mask]
 
         # Encode labels
-        label_to_int = {label: i for i, label in enumerate(np.unique(train_labels))}
+        label_to_int = {label: i for i,
+                        label in enumerate(np.unique(train_labels))}
         int_to_label = {i: label for label, i in label_to_int.items()}
 
-        train_labels = np.array([label_to_int[label] for label in train_labels])
+        train_labels = np.array([label_to_int[label]
+                                for label in train_labels])
         test_labels = np.array([label_to_int[label] for label in test_labels])
 
         if self.debug:
@@ -422,7 +433,9 @@ class DatasetBuilder:
 
         if self.oversample and self._labeling_scheme.merge_control and self.mode == "both":
             train_data, train_labels, train_groups = random_oversample(
-                train_data, train_labels, train_groups, oversample_labels=[label_to_int["LO_GAD"], label_to_int["LO_SAD"]])
+                train_data, train_labels, train_groups,
+                oversample_labels=[label_to_int["LO_GAD"],
+                                   label_to_int["LO_SAD"]])
 
             if self.debug:
                 self._output_label_counts(train_labels, int_to_label)
@@ -439,8 +452,10 @@ class DatasetBuilder:
 
             del int_to_label[3]
 
-            train_labels[(train_labels == int_lo_gad) | (train_labels == int_lo_sad)] = int_control
-            test_labels[(test_labels == int_lo_gad) | (test_labels == int_lo_sad)] = int_control
+            train_labels[(train_labels == int_lo_gad) | (
+                train_labels == int_lo_sad)] = int_control
+            test_labels[(test_labels == int_lo_gad) | (
+                test_labels == int_lo_sad)] = int_control
 
             if self.debug:
                 self._output_label_counts(train_labels, int_to_label)
@@ -454,10 +469,11 @@ class DatasetBuilder:
             # print("Labels:", list(train_labels), test_labels)
 
         train_torch_dataset = TorchDeepDataset(
-            train_data, train_labels, insert_ch_dim=insert_ch_dim, device=device)
+            train_data, train_labels, insert_ch_dim=insert_ch_dim,
+            device=device)
         test_torch_dataset = TorchDeepDataset(
             test_data, test_labels, insert_ch_dim=insert_ch_dim, device=device)
-        
+
         self.last_int_to_label = int_to_label
 
         return train_torch_dataset, test_torch_dataset
@@ -484,7 +500,8 @@ class TorchDeepDataset(Dataset):
 if __name__ == "__main__":
     # Normal dataset builder
     labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
-    builder = DatasetBuilder(labeling_scheme, seglen=10, oversample=True, mode="both", debug=True)
+    builder = DatasetBuilder(labeling_scheme, seglen=10,
+                             oversample=True, mode="both", debug=True)
     feats, labels, groups, df = builder.build_dataset_feats_labels_groups_df()
 
     # Count number of labels
