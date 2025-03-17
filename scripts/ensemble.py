@@ -53,12 +53,25 @@ def train_model(*, seglen, mode, domains, strategy, oversample=True):
             estimators=estimators,
             voting='soft'
         )
+        # Parameter grid for voting strategy
+        param_grid = {
+            'sel__k': [80]
+        }
     else:  # stacking strategy
         ensemble_classifier = StackingClassifier(
             estimators=estimators,
-            final_estimator=LogisticRegression(),
-            cv=10
+            final_estimator=LogisticRegression(random_state=42),
+            cv=5
         )
+        # Parameter grid for stacking strategy - add C parameter tuning
+        param_grid = {
+            'sel__k': [40],
+            # 'classif__final_estimator__C': [0.001, 0.01, 0.1, 1.0, 10.0, 100.0]
+            'classif__final_estimator__C': [0.01],
+            # 'classif__final_estimator__penalty': ['l1', 'l2', 'elasticnet'],
+            'classif__final_estimator__penalty': ['l1'],
+            'classif__final_estimator__solver': ['liblinear']
+        }
 
     # Create a pipeline with scaling, feature selection, and the classifier.
     pipeline = Pipeline([
@@ -67,17 +80,18 @@ def train_model(*, seglen, mode, domains, strategy, oversample=True):
         ('classif', ensemble_classifier)
     ])
 
-    # Grid search to find the best number of features.
-    param_grid = {
-        'sel__k': [20, 40, 60, 80, 100, 'all']
-        # 'sel__k': [10]
-    }
+    # Grid search to find the best parameters
     grid = GridSearchCV(pipeline, param_grid,
                         cv=cv_strategy, n_jobs=-1, verbose=10)
     grid.fit(features, labels, groups=groups)
     best_pipeline = grid.best_estimator_
-    best_k = grid.best_params_['sel__k']
+    best_params = grid.best_params_
+    print("Best parameters:", best_params)
+    best_k = best_params['sel__k']
     print("Best number of features:", best_k)
+
+    if strategy == "stacking":
+        print("Best C value:", best_params['classif__final_estimator__C'])
 
     # Obtain cross-validated predictions.
     predictions = cross_val_predict(

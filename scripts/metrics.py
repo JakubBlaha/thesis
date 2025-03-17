@@ -77,7 +77,7 @@ def plot_confusion_matrix(conf_matrix, class_labels, title=None,
     return fig, ax
 
 
-def main(file_path, title='Confusion Matrix'):
+def main(file_path, title=None):
     # Read CSV file with columns "predicted" and "actual"
     df = pd.read_csv(file_path)
     y_pred = df['predicted']
@@ -123,6 +123,11 @@ def main(file_path, title='Confusion Matrix'):
     print(f"  Recall:    {weighted_recall:.3f}")
     print(f"  F1 Score:  {weighted_f1:.3f}")
 
+    # Only generate confusion matrix if title is provided
+    if title is None:
+        print("\nNo title provided. Skipping confusion matrix generation.")
+        return
+
     # Generate confusion matrix pdf
     nice_labels = {
         'HI_GAD': 'GAD',
@@ -161,8 +166,8 @@ if __name__ == '__main__':
         help='Path to the CSV file (default: data.csv)'
     )
     parser.add_argument(
-        '--title', type=str, default='Confusion Matrix',
-        help='Title for the confusion matrix plot (default: "Confusion Matrix")'
+        '--title', type=str,
+        help='Title for the confusion matrix plot (required for confusion matrix generation)'
     )
     args = parser.parse_args()
     main(args.file, args.title)
