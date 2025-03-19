@@ -32,11 +32,11 @@ FINAL_CLASSIFIERS = {
     "rf": {
         "classifier": RandomForestClassifier(random_state=42),
         "param_grid": {
-            'classif__final_estimator__n_estimators': [30, 50, 100],
+            # 'classif__final_estimator__n_estimators': [10, 20, 30, 50, 100],
+            'classif__final_estimator__n_estimators': [30],
             # 'classif__final_estimator__max_depth': [2, 3, 4],
             'classif__final_estimator__max_depth': [2],
-            'classif__final_estimator__max_features': ['sqrt', None],
-
+            'classif__final_estimator__max_features': ['sqrt'],
         }
     },
     "mlp": {
