@@ -5,7 +5,8 @@ import datetime
 import argparse
 
 from sklearn.discriminant_analysis import StandardScaler
-from sklearn.ensemble import RandomForestClassifier, VotingClassifier, StackingClassifier
+from sklearn.ensemble import RandomForestClassifier, VotingClassifier, StackingClassifier, GradientBoostingClassifier
+from sklearn.metrics import accuracy_score
 from sklearn.model_selection import LeaveOneGroupOut, GridSearchCV, cross_val_predict
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
@@ -18,7 +19,51 @@ from sklearn.linear_model import LogisticRegression
 from utils import DatasetBuilder, LabelingScheme, DaspsLabeling
 
 
-def train_model(*, seglen, mode, domains, strategy, oversample=True):
+# Define the available final classifiers and their parameter grids
+FINAL_CLASSIFIERS = {
+    "logistic": {
+        "classifier": LogisticRegression(random_state=42),
+        "param_grid": {
+            'classif__final_estimator__C': [0.01],
+            'classif__final_estimator__penalty': ['l1'],
+            'classif__final_estimator__solver': ['liblinear']
+        }
+    },
+    "rf": {
+        "classifier": RandomForestClassifier(random_state=42),
+        "param_grid": {
+            'classif__final_estimator__n_estimators': [30, 50, 100],
+            # 'classif__final_estimator__max_depth': [2, 3, 4],
+            'classif__final_estimator__max_depth': [2],
+            'classif__final_estimator__max_features': ['sqrt', None],
+
+        }
+    },
+    "mlp": {
+        "classifier": MLPClassifier(random_state=42, early_stopping=True),
+        "param_grid": {
+            # 'classif__final_estimator__hidden_layer_sizes': [(10,), (20,), (30,), (10, 10)],
+            'classif__final_estimator__hidden_layer_sizes': [(30,)],
+            # 'classif__final_estimator__alpha': [1e-8, 1e-9, 1e-7],
+            'classif__final_estimator__alpha': [1e-8],
+        }
+    },
+    "gb": {
+        "classifier": GradientBoostingClassifier(random_state=42),
+        "param_grid": {
+            'classif__final_estimator__n_estimators': [100, 200, 300],
+            'classif__final_estimator__learning_rate': [0.05, 0.1, 0.2],
+            'classif__final_estimator__max_depth': [3, 5, 7]
+        }
+    }
+}
+
+
+def train_model(*, seglen, mode, domains, strategy,
+                final_classifier="logistic", oversample=True, seed=42):
+    # Set seed for reproducibility
+    np.random.seed(seed)
+
     labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
 
     # Build the dataset: features, labels, groups, and a dataframe with feature names.
@@ -34,18 +79,18 @@ def train_model(*, seglen, mode, domains, strategy, oversample=True):
     # Create ensemble model directly here
     estimators = [
         ('svm', svm.SVC(
-            kernel='rbf', C=10, gamma=0.1,
-            probability=True, random_state=42)),
-        ('knn', KNeighborsClassifier(
-            n_neighbors=5, weights='uniform')),
+            kernel='rbf', C=10, gamma=0.1, probability=True,
+            random_state=seed)),
+        ('knn', KNeighborsClassifier(n_neighbors=5, weights='uniform')),
         ('mlp',
          MLPClassifier(
              hidden_layer_sizes=(20,),
              activation='relu', solver='adam', alpha=1e-7,
-             learning_rate='constant', random_state=42, early_stopping=True)),
+             learning_rate='constant', random_state=seed,
+             early_stopping=True)),
         ('rf',
          RandomForestClassifier(
-             n_estimators=400, max_depth=20, random_state=42))]
+             n_estimators=400, max_depth=20, random_state=seed))]
 
     # Choose ensemble type based on selected strategy
     if strategy == "voting":
@@ -58,20 +103,34 @@ def train_model(*, seglen, mode, domains, strategy, oversample=True):
             'sel__k': [80]
         }
     else:  # stacking strategy
+        # Get the selected final classifier
+        if final_classifier not in FINAL_CLASSIFIERS:
+            raise ValueError(f"Unknown final classifier: {final_classifier}. "
+                             f"Available options: {', '.join(FINAL_CLASSIFIERS.keys())}")
+
+        selected_classifier = FINAL_CLASSIFIERS[final_classifier]
+
+        # Create a copy of the classifier with the provided seed
+        final_estimator = selected_classifier["classifier"]
+        if hasattr(final_estimator, 'random_state'):
+            final_estimator.set_params(random_state=seed)
+
         ensemble_classifier = StackingClassifier(
             estimators=estimators,
-            final_estimator=LogisticRegression(random_state=42),
+            final_estimator=final_estimator,
             cv=5
         )
-        # Parameter grid for stacking strategy - add C parameter tuning
+
+        # Base parameter grid with common parameters
         param_grid = {
-            'sel__k': [40],
-            # 'classif__final_estimator__C': [0.001, 0.01, 0.1, 1.0, 10.0, 100.0]
-            'classif__final_estimator__C': [0.01],
-            # 'classif__final_estimator__penalty': ['l1', 'l2', 'elasticnet'],
-            'classif__final_estimator__penalty': ['l1'],
-            'classif__final_estimator__solver': ['liblinear']
+            # 'sel__k': [40, 60, 80]
+            'sel__k': [40]
         }
+
+        # Add classifier-specific parameters
+        param_grid.update(selected_classifier["param_grid"])
+        print(
+            f"Using {final_classifier} as final classifier with parameter grid: {param_grid}")
 
     # Create a pipeline with scaling, feature selection, and the classifier.
     pipeline = Pipeline([
@@ -90,14 +149,15 @@ def train_model(*, seglen, mode, domains, strategy, oversample=True):
     best_k = best_params['sel__k']
     print("Best number of features:", best_k)
 
-    if strategy == "stacking":
-        print("Best C value:", best_params['classif__final_estimator__C'])
-
     # Obtain cross-validated predictions.
     predictions = cross_val_predict(
         best_pipeline, features, labels,
         cv=cv_strategy, groups=groups, n_jobs=-1
     )
+
+    # Calculate and print the accuracy
+    accuracy = accuracy_score(labels, predictions)
+    print(f"Best model accuracy: {accuracy:.3f}")
 
     # Convert integer labels to string representations
     actual_labels_str = [
@@ -112,6 +172,11 @@ def train_model(*, seglen, mode, domains, strategy, oversample=True):
     })
     timestamp = str(int(datetime.datetime.now().timestamp()))
     classifier_name = f"ensemble-{strategy}"
+    if strategy == "stacking":
+        classifier_name += f"-{final_classifier}"
+
+    # Add accuracy to the parameter information
+    best_params['accuracy'] = accuracy
 
     # Create the results directory if it doesn't exist
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -123,8 +188,17 @@ def train_model(*, seglen, mode, domains, strategy, oversample=True):
         results_dir,
         f"{classifier_name}_seglen_{seglen}_k_{best_k}_predictions_{timestamp}.csv"
     ))
+
+    # First save the prediction results
     df_results.to_csv(filename, index=False)
-    print("Saved predictions to:", filename)
+
+    # Then append the parameters as additional rows
+    with open(filename, 'a') as f:
+        f.write("\n\n# Model Parameters:\n")
+        for param, value in best_params.items():
+            f.write(f"{param},{value}\n")
+
+    print("Saved predictions and parameters to:", filename)
 
 
 # Example usage:
@@ -148,6 +222,13 @@ if __name__ == '__main__':
     parser.add_argument(
         '--no-oversample', action='store_false', dest='oversample',
         help='Disable oversampling')
+    parser.add_argument(
+        '--final-classifier', '-fc', type=str,
+        choices=list(FINAL_CLASSIFIERS.keys()),
+        help='Final classifier for stacking')
+    parser.add_argument(
+        '--seed', type=int, default=42,
+        help='Random seed for reproducible results (default: 42)')
     parser.set_defaults(oversample=True)
 
     args = parser.parse_args()
@@ -160,4 +241,6 @@ if __name__ == '__main__':
         mode=args.mode,
         domains=args.domains,
         strategy=args.strategy,
-        oversample=args.oversample)
+        final_classifier=args.final_classifier,
+        oversample=args.oversample,
+        seed=args.seed)
