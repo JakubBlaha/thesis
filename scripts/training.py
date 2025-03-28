@@ -12,7 +12,7 @@ from sklearn.neural_network import MLPClassifier
 from sklearn import svm
 from sklearn.feature_selection import SelectFdr, SelectFpr, SelectKBest, f_classif
 from sklearn.pipeline import FunctionTransformer, Pipeline
-from sklearn.metrics import f1_score, precision_score, recall_score
+from sklearn.metrics import f1_score, precision_score, recall_score, confusion_matrix
 import pandas as pd
 
 from utils import DatasetBuilder, LabelingScheme, DaspsLabeling
@@ -29,11 +29,22 @@ os.makedirs(results_dir, exist_ok=True)
 GRID = {
     "svm-rbf": {
         "classif": svm.SVC,
+
+        # Three class
+        # "params": {
+        #     "classif__C": [10**i for i in range(-3, 5)],
+        #     "classif__gamma": [10**i for i in range(-5, 0)],
+        #     "classif__kernel": ['rbf'],
+        #     "classif__max_iter": [10_000],
+        #     "sel__k": [5, 8, 10, 20, 30, 40, 60, 100, "all"]
+        # },
+
+        # Binary
         "params": {
-            "classif__C": [10**i for i in range(-3, 5)],
-            "classif__gamma": [10**i for i in range(-5, 0)],
+            "classif__C": [100],
+            "classif__gamma": [0.01],
             "classif__kernel": ['rbf'],
-            "classif__max_iter": [5000],
+            "classif__max_iter": [10_000],
             "sel__k": [5, 8, 10, 20, 30, 40, 60, 100, "all"]
         }
     },
@@ -67,14 +78,26 @@ GRID = {
     # Random forest works best with
     "rf": {
         "classif": RandomForestClassifier,
+
+        # Three class
+        # "params": {
+        #     "classif__n_estimators": [300, 400, 450],
+        #     "classif__max_depth": [5, 6, 8, 10, 15, 20],
+        #     # "min_samples_split": [2, 5, 10],
+        #     # "min_samples_leaf": [1, 2, 4],
+        #     # "max_features": ['auto', 'sqrt', 'log2'],
+        #     "sel__k": [5, 10, 20, 40, 60, "all"]
+        # },
+
+        # Binary
         "params": {
-            "classif__n_estimators": [300, 400, 450],
-            "classif__max_depth": [5, 6, 8, 10, 15, 20],
-            # "min_samples_split": [2, 5, 10],
-            # "min_samples_leaf": [1, 2, 4],
-            # "max_features": ['auto', 'sqrt', 'log2'],
-            "sel__k": [5, 10, 20, 40, 60, "all"]
-        }
+            # "classif__n_estimators": [300, 400, 450],
+            "classif__n_estimators": [450],
+            "classif__max_depth": [8, 10, 20],
+            # "sel__k": [5, 10, 20, 40, 60, "all"],
+            "sel__k": [60]
+        },
+
     },
     # "nb": {
     #     "classif": GaussianNB,
@@ -136,6 +159,9 @@ def train_model(
 
     print("Number of features:", n_feats)
 
+    print("Label distribution:")
+    print(pd.Series(labels).value_counts())
+
     # Print mean of each feature
     # print("Mean of each feature:")
     # print(np.mean(features, axis=0))
@@ -162,7 +188,7 @@ def train_model(
                 _corrected_feat_selection_grid.append(i)
 
         param_grid["sel__k"] = _corrected_feat_selection_grid
-        param_grid["sel__k"] = [60]
+        # param_grid["sel__k"] = [60]
 
     # Create pipeline with feature selection and SVM
     pipeline = Pipeline([
@@ -187,12 +213,17 @@ def train_model(
 
     scores = cross_val_score(
         best_estimator, features, labels, groups=groups, cv=_cv,
-        verbose=verbosity, n_jobs=None)
+        verbose=verbosity, n_jobs=-1)
+
+    # Get the unique class labels to ensure consistent confusion matrix dimensions
+    unique_labels = np.unique(labels)
+    n_classes = len(unique_labels)
 
     # Calculate additional metrics using cross-validation
     f1_scores = []
     precision_scores = []
     recall_scores = []
+    conf_matrices = []
 
     for train_idx, test_idx in _cv.split(
             features, labels, groups if cv == 'logo' else None):
@@ -209,6 +240,10 @@ def train_model(
             recall_score(
                 y_test, y_pred, average='macro',
                 zero_division=0))
+
+        # Create confusion matrix with consistent labels
+        cm = confusion_matrix(y_test, y_pred, labels=unique_labels)
+        conf_matrices.append(cm)
 
     # Output
 
@@ -277,6 +312,34 @@ def train_model(
         tabulate(
             config_table, headers="keys", tablefmt="pretty",
             maxcolwidths=30))
+
+    # Print confusion matrix with proportions (0-1)
+    # First sum all matrices instead of averaging
+    sum_conf_matrix = np.sum(conf_matrices, axis=0)
+
+    # Normalize by row (convert to proportions 0-1)
+    row_sums = sum_conf_matrix.sum(axis=1, keepdims=True)
+    norm_conf_matrix = np.zeros_like(sum_conf_matrix, dtype=float)
+    # Avoid division by zero
+    for i in range(len(row_sums)):
+        if row_sums[i] > 0:
+            # Now proportions, not percentages
+            norm_conf_matrix[i] = sum_conf_matrix[i] / row_sums[i]
+
+    print("\nConfusion Matrix (proportions):")
+    # Round to 2 decimal places for display
+    norm_conf_matrix_rounded = np.round(norm_conf_matrix, 2)
+    cm_df = pd.DataFrame(norm_conf_matrix_rounded,
+                         index=[f'True {i}' for i in unique_labels],
+                         columns=[f'Pred {i}' for i in unique_labels])
+    print(tabulate(cm_df, headers="keys", tablefmt="pretty"))
+
+    # Also show the raw counts
+    print("\nConfusion Matrix (counts):")
+    cm_counts_df = pd.DataFrame(sum_conf_matrix,
+                                index=[f'True {i}' for i in unique_labels],
+                                columns=[f'Pred {i}' for i in unique_labels])
+    print(tabulate(cm_counts_df, headers="keys", tablefmt="pretty"))
 
     # Convert best parameters to a string for storage
     best_params_str = ", ".join(

@@ -51,9 +51,9 @@ FINAL_CLASSIFIERS = {
     "gb": {
         "classifier": GradientBoostingClassifier(random_state=42),
         "param_grid": {
-            'classif__final_estimator__n_estimators': [100, 200, 300],
-            'classif__final_estimator__learning_rate': [0.05, 0.1, 0.2],
-            'classif__final_estimator__max_depth': [3, 5, 7]
+            'classif__final_estimator__n_estimators': [200],
+            'classif__final_estimator__learning_rate': [0.2, 0.5, 1],
+            'classif__final_estimator__max_depth': [1, 2, 3]
         }
     }
 }

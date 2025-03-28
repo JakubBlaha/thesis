@@ -79,7 +79,7 @@ def plot_confusion_matrix(conf_matrix, class_labels, title=None,
 
 def main(file_path, title=None):
     # Read CSV file with columns "predicted" and "actual"
-    df = pd.read_csv(file_path)
+    df = pd.read_csv(file_path, comment='#')
     y_pred = df['predicted']
     y_true = df['actual']
 
