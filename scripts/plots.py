@@ -4,6 +4,7 @@ import os
 import pandas as pd
 import seaborn as sns
 import io
+import numpy as np
 from collections import Counter
 
 plt.rcParams['font.family'] = 'serif'
@@ -110,57 +111,94 @@ def plot_feature_significance(csv_data):
     # Read CSV data into a DataFrame
     df = pd.read_csv(io.StringIO(csv_data))
 
-    # Extract all features from the selected_features column
-    all_features = []
-    for features in df['selected_features']:
+    # Create a dictionary to track features selected by each classifier
+    feature_classifier_counts = {}
+
+    # Process each row in the dataframe
+    for _, row in df.iterrows():
+        classifier = row['classifier']
+        # Get display name for the classifier
+        display_classifier = get_display_name(classifier)
+
         # Split the feature string into a list and clean it
-        feature_list = [f.strip() for f in features.split(',')]
-        all_features.extend(feature_list)
+        features = [f.strip() for f in row['selected_features'].split(',')]
 
-    # Count frequency of each feature
-    feature_counts = Counter(all_features)
-    # feature_counts = map(lambda x: x[1], feature_counts.items())
+        # Count each feature for this classifier
+        for feature in features:
+            if feature not in feature_classifier_counts:
+                feature_classifier_counts[feature] = Counter()
+            feature_classifier_counts[feature][display_classifier] += 1
 
-    # Sort features by frequency
-    # sorted_features = sorted(
-    #     feature_counts.items(),
-    #     key=lambda x: x[1],
-    #     reverse=True)
+    # Sort features by total count (descending) - using frequency as proxy for significance
+    # More frequently selected features are assumed to have lower p-values (higher significance)
+    sorted_features = sorted(
+        feature_classifier_counts.items(),
+        key=lambda x: sum(x[1].values()),
+        reverse=True
+    )
 
-    # Prettify feature names
-    pretty_features = [(prettify_feature_name(feature), count)
-                       for feature, count in feature_counts.items()]
+    # Prettify feature names and keep counts
+    pretty_features = []
+    for feature, counts in sorted_features:
+        pretty_name = prettify_feature_name(feature)
+        pretty_features.append((pretty_name, counts))
 
-    # Unpack the prettified features and counts
-    features, counts = zip(*pretty_features)
+    # Extract feature names and counts for plotting
+    features, classifier_counts = zip(*pretty_features)
 
-    # Create vertical bar plot (horizontal visually)
-    # Increase figure size for longer feature names
+    # Get all unique classifiers
+    all_classifiers = set()
+    for counts in classifier_counts:
+        all_classifiers.update(counts.keys())
+    all_classifiers = sorted(all_classifiers)
+
+    # Create figure
     plt.figure(figsize=(7, 10))
 
-    # Make bars narrower by setting height parameter (which affects width in horizontal bars)
-    bars = plt.barh(
-        list(reversed(features)),
-        list(reversed(counts)),
-        height=0.5)
+    # Features are displayed from bottom to top in order of increasing significance
+    # (most significant/lowest p-value at the top)
+    reversed_features = list(reversed(features))
+
+    # Create a data array for stacked bars
+    data = np.zeros((len(features), len(all_classifiers)))
+    for i, counts in enumerate(classifier_counts):
+        for j, classifier in enumerate(all_classifiers):
+            data[i, j] = counts.get(classifier, 0)
+
+    # Reverse data for plotting (so highest significance is at the top)
+    reversed_data = np.flip(data, axis=0)
+
+    # Plot stacked bars
+    bottom = np.zeros(len(features))
+    for i, classifier in enumerate(all_classifiers):
+        plt.barh(
+            reversed_features,
+            reversed_data[:, i],
+            left=bottom,
+            height=0.5,
+            label=classifier
+        )
+        bottom += reversed_data[:, i]
 
     # Customize plot with bigger text
-    # plt.ylabel('Features', fontsize=14)
     plt.xlabel('Frequency of Selection', fontsize=14, loc='left')
     plt.yticks(fontsize=10)  # Increase y-axis label size
     plt.xticks(fontsize=10)  # Increase x-axis label size
+    plt.title('Feature Significance (ordered by selection frequency)', fontsize=14)
 
     # Add grid lines for better readability
     plt.grid(axis='x', linestyle='--', alpha=0.7)
 
     # Ensure x-axis has appropriate tick marks
-    max_count = max(counts)
+    max_count = max([sum(counts.values()) for counts in classifier_counts])
     plt.xlim(0, max_count * 1.05)
     plt.ylim(-0.5, len(features) - 0.5)
 
     tick_interval = 1
-
     plt.xticks(range(0, int(max_count) + tick_interval, tick_interval))
+
+    # Add legend
+    plt.legend(loc='lower right', bbox_to_anchor=(0.95, 0.05))
 
     plt.tight_layout()
 
@@ -168,10 +206,13 @@ def plot_feature_significance(csv_data):
     plot_path = os.path.join(plots_path, "feature_significance.pdf")
     plt.savefig(plot_path)
 
-    # Print top 10 most frequent features
-    print("\nTop 10 Most Frequently Selected Features:")
-    for feature, count in pretty_features[:10]:
-        print(f"{feature}: {count} times")
+    # Print top 10 most frequent features with classifier breakdown
+    print("\nTop 10 Most Significant Features:")
+    for i, (feature, counts) in enumerate(pretty_features[:10]):
+        total = sum(counts.values())
+        classifier_breakdown = ", ".join(
+            [f"{c}: {counts[c]}" for c in counts if counts[c] > 0])
+        print(f"{feature}: {total} times ({classifier_breakdown})")
 
 
 def generate_feature_table_latex(csv_data):
@@ -225,8 +266,8 @@ def generate_feature_table_latex(csv_data):
         if i < len(second_column) and second_column[i][0]:
             feature2, count2 = second_column[i]
             feature2_escaped = feature2.replace('_', '\\_')
-            latex_table += f"{feature1_escaped}      & {count1}      & {
-                feature2_escaped}      & {count2}      \\\\\n"
+            latex_table += f"{feature1_escaped}       & {count1}       & {
+                feature2_escaped}       & {count2}       \\\\\n"
         else:
             latex_table += f"{feature1_escaped} & {count1} & & \\\\\n"
 
@@ -250,8 +291,8 @@ def prettify_feature_name(feature):
             electrode_parts = electrodes.split('-')
             if len(electrode_parts) == 2:
                 electrode1, electrode2 = electrode_parts
-                return f"Asym. Index - {band.capitalize()}  ({electrode1}-{
-                    electrode2})"
+                return f"Asym. Index - {
+                    band.capitalize()}   ({electrode1} -{electrode2}) "
 
     # Handle relative and absolute power features
     if feature.startswith('rel_pow_') or feature.startswith('abs_pow_'):
