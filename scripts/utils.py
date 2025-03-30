@@ -189,6 +189,24 @@ class DatasetBuilder:
             features, labels, groups = random_oversample(
                 features, labels, groups)
 
+        # Swap labels 0 and 1 when mode is not 'both'
+        if self.mode != "both":
+            # Find indices where labels are 0 or 1
+            zero_indices = labels == 0
+            one_indices = labels == 1
+
+            # Swap labels
+            labels[zero_indices] = 1
+            labels[one_indices] = 0
+
+            # Update int_to_label dictionary
+            if 0 in int_to_label and 1 in int_to_label:
+                int_to_label[0], int_to_label[1] = int_to_label[1], int_to_label[0]
+
+            if self.debug:
+                print(f"Swapped labels 0 and 1 for mode: {self.mode}")
+                self._output_label_counts(labels, int_to_label)
+
         self.last_int_to_label = int_to_label
 
         return features, labels, groups, df
