@@ -39,14 +39,25 @@ GRID = {
         #     "sel__k": [5, 8, 10, 20, 30, 40, 60, 100, "all"]
         # },
 
-        # Binary
+        # Binary SAD
+        # "params": {
+        #     "classif__C": [100],
+        #     "classif__gamma": [0.01],
+        #     "classif__kernel": ['rbf'],
+        #     "classif__max_iter": [20_000],
+        #     "sel__k": [5, 8, 10, 20, 30, 40, 60, 100, "all"]
+        # }
+
+        # Binary DASPS
         "params": {
-            "classif__C": [100],
-            "classif__gamma": [0.01],
+            "classif__C": [10**i for i in range(-3, 5)],
+            "classif__gamma": [10**i for i in range(-5, 0)],
             "classif__kernel": ['rbf'],
             "classif__max_iter": [10_000],
-            "sel__k": [5, 8, 10, 20, 30, 40, 60, 100, "all"]
-        }
+            "sel__k": [60],
+            # "sel__k": [5, 8, 10, 20, 30, 40, 60, 100],
+            "classif__class_weight": ['balanced'],
+        },
     },
     # Linear kernel seems to work better without standard scaler
     "svm-lin": {
@@ -75,29 +86,30 @@ GRID = {
             "sel__k": [20, 30, 40, 60, "all"]
         }
     },
-    # Random forest works best with
     "rf": {
         "classif": RandomForestClassifier,
 
-        # Three class
         # "params": {
         #     "classif__n_estimators": [300, 400, 450],
         #     "classif__max_depth": [5, 6, 8, 10, 15, 20],
         #     # "min_samples_split": [2, 5, 10],
         #     # "min_samples_leaf": [1, 2, 4],
         #     # "max_features": ['auto', 'sqrt', 'log2'],
+        #     # "sel__k": [5, 10, 20, 40, 60, "all"],
         #     "sel__k": [5, 10, 20, 40, 60, "all"]
         # },
 
-        # Binary
+        # DASPS
         "params": {
-            # "classif__n_estimators": [300, 400, 450],
-            "classif__n_estimators": [450],
-            "classif__max_depth": [8, 10, 20],
+            "classif__n_estimators": [300],
+            "classif__max_depth": [8],
+            "classif__class_weight": ['balanced'],
+            # "min_samples_split": [2, 5, 10],
+            # "min_samples_leaf": [1, 2, 4],
+            # "max_features": ['auto', 'sqrt', 'log2'],
             # "sel__k": [5, 10, 20, 40, 60, "all"],
-            "sel__k": [60]
+            "sel__k": [5, 10, 20, 40, 60, "all"]
         },
-
     },
     # "nb": {
     #     "classif": GaussianNB,
@@ -111,19 +123,23 @@ GRID = {
         "params": {
             "classif__n_neighbors": [3, 5, 8, 10, 15, 20, 30],
             "classif__weights": ['uniform', 'distance'],
-            "sel__k": [1, 2, 3, 4, 5, 8, 10, 20, 30, 40, 60]
+            "sel__k": [1, 2, 3, 4, 5, 8, 10, 20, 30, 40, 60],
+            # "sel__k": [60],
         }
     },
     "mlp": {
         "classif": MLPClassifier,
         "params": {
             "classif__hidden_layer_sizes": [(30,), (20,), (10,)],
+            # "classif__hidden_layer_sizes": [(20,)],
             "classif__activation": ['relu'],
             "classif__solver": ['adam'],
             "classif__alpha": [10**i for i in range(-9, -5)],
             "classif__learning_rate": ['constant'],
             "classif__max_iter": [2000],
-            "sel__k": [20, 40, 60, "all"]
+            "sel__k": [20, 40, 60, "all"],
+            "classif__class_weight": ['balanced'],
+            # "sel__k": [60]
         },
     },
     # "lda": {
@@ -162,9 +178,10 @@ def train_model(
     print("Label distribution:")
     print(pd.Series(labels).value_counts())
 
-    # Print mean of each feature
-    # print("Mean of each feature:")
-    # print(np.mean(features, axis=0))
+    int_to_label = builder.last_int_to_label
+
+    print("Label mapping:")
+    print(int_to_label)
 
     if cv == 'logo':
         _cv = LeaveOneGroupOut()
@@ -330,15 +347,19 @@ def train_model(
     # Round to 2 decimal places for display
     norm_conf_matrix_rounded = np.round(norm_conf_matrix, 2)
     cm_df = pd.DataFrame(norm_conf_matrix_rounded,
-                         index=[f'True {i}' for i in unique_labels],
-                         columns=[f'Pred {i}' for i in unique_labels])
+                         index=[f'True {int_to_label[i]} '
+                                for i in unique_labels],
+                         columns=[f'Pred {int_to_label[i]} '
+                                  for i in unique_labels])
     print(tabulate(cm_df, headers="keys", tablefmt="pretty"))
 
     # Also show the raw counts
     print("\nConfusion Matrix (counts):")
     cm_counts_df = pd.DataFrame(sum_conf_matrix,
-                                index=[f'True {i}' for i in unique_labels],
-                                columns=[f'Pred {i}' for i in unique_labels])
+                                index=[f'True {int_to_label[i]} '
+                                       for i in unique_labels],
+                                columns=[f'Pred {int_to_label[i]} '
+                                         for i in unique_labels])
     print(tabulate(cm_counts_df, headers="keys", tablefmt="pretty"))
 
     # Convert best parameters to a string for storage
