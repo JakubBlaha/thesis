@@ -138,7 +138,6 @@ GRID = {
             "classif__learning_rate": ['constant'],
             "classif__max_iter": [2000],
             "sel__k": [20, 40, 60, "all"],
-            "classif__class_weight": ['balanced'],
             # "sel__k": [60]
         },
     },
