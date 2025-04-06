@@ -12,7 +12,7 @@ os.makedirs(plot_dir, exist_ok=True)
 
 
 def plot_confusion_matrix(conf_matrix, class_labels, title=None,
-                          cmap='Blues', figsize=(5, 4),
+                          cmap='Blues', figsize=(4, 3.5),
                           annot=True, fmt='d'):
     """
     Plot a confusion matrix using heatmap.

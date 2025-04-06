@@ -204,7 +204,7 @@ def extract_features_from_all_segments(seglen=None):
             paths_by_segment_length[segment_length] = []
 
         paths_by_segment_length[segment_length].append(path)
-    
+
     # If seglen is specified, only process that segment length
     if seglen is not None:
         if seglen in paths_by_segment_length:
