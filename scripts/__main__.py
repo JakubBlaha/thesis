@@ -8,6 +8,7 @@ from extract_features import extract_features_from_all_segments
 from label import make_labeled_csv_files
 from training import train_models
 from deep import run_deep_learning
+from ensemble import train_model as run_ensemble  # Import the ensemble function
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -57,8 +58,9 @@ def main():
 
     subparsers = parser.add_subparsers(dest="command")
 
-    available_commands = ["convert", "segment",
-                          "autoreject", "extract", "label", "train", "deep"]
+    available_commands = [
+        "convert", "segment", "autoreject", "extract", "label", "train",
+        "deep", "ensemble"]  # Add ensemble
 
     cmd_parsers = {}
 
@@ -134,6 +136,54 @@ def main():
         required=True
     )
 
+    # Add arguments for ensemble command
+    cmd_parsers["ensemble"].add_argument(
+        "--strategy",
+        required=True,
+        choices=["voting", "stacking"],
+        help="Ensemble strategy: voting or stacking",
+    )
+
+    cmd_parsers["ensemble"].add_argument(
+        "--seglen",
+        type=int,
+        default=15,
+        help="Segment length in seconds (default: 15)",
+    )
+
+    cmd_parsers["ensemble"].add_argument(
+        "--mode",
+        choices=["both", "dasps", "sad"],
+        default="both",
+        help="Dataset mode for training (default: both)",
+    )
+
+    cmd_parsers["ensemble"].add_argument(
+        "--domains",
+        default="rel_pow,conn,ai,time,abs_pow",
+        help="Comma-separated list of domains to use (default: all domains)",
+    )
+
+    cmd_parsers["ensemble"].add_argument(
+        "--no-oversample",
+        action="store_true",
+        help="Disable oversampling (enabled by default)",
+    )
+
+    cmd_parsers["ensemble"].add_argument(
+        "--final-classifier",
+        choices=["logistic", "rf", "mlp", "gb"],
+        default="logistic",
+        help="Final classifier for stacking (default: logistic)",
+    )
+
+    cmd_parsers["ensemble"].add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for reproducibility (default: 42)",
+    )
+
     args = parser.parse_args()
 
     if not args.command or args.command not in available_commands:
@@ -205,6 +255,31 @@ def main():
             f"Running deep learning with seglen={seglen}, classifier={classif}")
         run_deep_learning(seglen=seglen, model_type_param=classif)
         logger.info("Deep learning completed.")
+
+    if args.command == "ensemble":
+        strategy = args.strategy
+        seglen = args.seglen
+        mode = args.mode
+        domains = parse_domains(args.domains)
+        oversample = not args.no_oversample
+        final_classifier = args.final_classifier
+        seed = args.seed
+
+        logger.info(f"Running ensemble with strategy={strategy}, seglen={seglen}, "
+                    f"mode={mode}, domains={domains}, oversample={oversample}, "
+                    f"final_classifier={final_classifier}, seed={seed}")
+
+        run_ensemble(
+            seglen=seglen,
+            mode=mode,
+            domains=domains,
+            strategy=strategy,
+            final_classifier=final_classifier,
+            oversample=oversample,
+            seed=seed
+        )
+
+        logger.info("Ensemble training completed.")
 
 
 if __name__ == '__main__':
