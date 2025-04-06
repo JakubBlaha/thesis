@@ -5,7 +5,6 @@ from convert import convert_dasps_to_fif, convert_sad_to_fif
 from segment import segment, validate_seglen
 from autoreject_runner import run_autoreject
 from extract_features import extract_features_from_all_segments
-from label import make_labeled_csv_files
 from training import train_models
 from deep import run_deep_learning
 from ensemble import train_model as run_ensemble  # Import the ensemble function
@@ -59,7 +58,7 @@ def main():
     subparsers = parser.add_subparsers(dest="command")
 
     available_commands = [
-        "convert", "segment", "autoreject", "extract", "label", "train",
+        "convert", "segment", "autoreject", "extract", "train",
         "deep", "ensemble"]  # Add ensemble
 
     cmd_parsers = {}
@@ -212,11 +211,6 @@ def main():
         extract_features_from_all_segments(seglen=args.seglen)
 
         logger.info("Feature extraction completed.")
-
-    if args.command == "label":
-        make_labeled_csv_files()
-
-        logger.info("Labeling completed.")
 
     if args.command == "train":
         # Parse segment lengths from command line argument
