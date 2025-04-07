@@ -167,5 +167,7 @@ cython_debug/
 
 data/*
 !data/datasets
+!data/results
+data/results/*
 
 figures

@@ -6,6 +6,9 @@ import seaborn as sns
 import io
 import numpy as np
 from collections import Counter
+from sklearn.feature_selection import f_classif
+
+from ..utils import DatasetBuilder, LabelingScheme, DaspsLabeling
 
 plt.rcParams['font.family'] = 'serif'
 
@@ -27,7 +30,38 @@ def get_display_name(classifier_name):
     return CLASSIFIER_NAMES.get(classifier_name, classifier_name)
 
 
+def get_feature_order():
+    """Compute ANOVA scores and return features ordered by significance (lowest p-value to highest)."""
+    labeling_scheme = LabelingScheme(dasps_labeling=DaspsLabeling.HAM)
+    dataset_builder = DatasetBuilder(
+        labeling_scheme=labeling_scheme,
+        seglen=15,
+    )
+
+    feats, labels, groups, df = dataset_builder.build_dataset_feats_labels_groups_df(
+        domains=['rel_pow', 'conn', 'ai', 'time', 'abs_pow'], )
+
+    # Calculate ANOVA F-value and p-value for each feature
+    f_values, p_values = f_classif(feats, labels)
+
+    # Create a list of (feature_name, p_value) tuples
+    # Exclude the last two columns (assuming they are 'label' and 'group')
+    feature_names = df.columns[:-2]
+    feature_p_values = list(zip(feature_names, p_values))
+
+    # Sort by p-value (ascending - lowest p-value is most significant)
+    sorted_features = sorted(feature_p_values, key=lambda x: x[1])
+
+    # Return just the ordered feature names
+    ordered_features = [feature for feature, _ in sorted_features]
+
+    return ordered_features
+
+
 def plot_feature_significance(csv_data):
+    # Get features ordered by ANOVA significance
+    ordered_features = get_feature_order()
+
     # Read CSV data into a DataFrame
     df = pd.read_csv(io.StringIO(csv_data))
 
@@ -49,12 +83,17 @@ def plot_feature_significance(csv_data):
                 feature_classifier_counts[feature] = Counter()
             feature_classifier_counts[feature][display_classifier] += 1
 
-    # Sort features by total count (descending) - using frequency as proxy for significance
-    # More frequently selected features are assumed to have lower p-values (higher significance)
+    # Create a dictionary mapping features to their order
+    feature_order = {feat: idx for idx, feat in enumerate(ordered_features)}
+
+    # Sort features by the predefined order, then by frequency for features not in the order
+    def get_sort_key(feature_item):
+        feature, counts = feature_item
+        return (feature_order.get(feature, float('inf')), -sum(counts.values()))
+
     sorted_features = sorted(
         feature_classifier_counts.items(),
-        key=lambda x: sum(x[1].values()),
-        reverse=True
+        key=get_sort_key
     )
 
     # Prettify feature names and keep counts
@@ -104,7 +143,7 @@ def plot_feature_significance(csv_data):
     plt.xlabel('Frequency of Selection', fontsize=14, loc='left')
     plt.yticks(fontsize=10)  # Increase y-axis label size
     plt.xticks(fontsize=10)  # Increase x-axis label size
-    plt.title('Feature Significance (ordered by selection frequency)', fontsize=14)
+    plt.title('Feature Significance', fontsize=14)
 
     # Add grid lines for better readability
     plt.grid(axis='x', linestyle='--', alpha=0.7)
@@ -139,7 +178,7 @@ def prettify_feature_name(feature):
             if len(electrode_parts) == 2:
                 electrode1, electrode2 = electrode_parts
                 return f"Asym. Index - {
-                    band.capitalize()}    ({electrode1}  -{electrode2}) "
+                    band.capitalize()}  ({electrode1}  - {electrode2}) "
 
     # Handle relative and absolute power features
     if feature.startswith('rel_pow_') or feature.startswith('abs_pow_'):
