@@ -36,10 +36,11 @@ def get_feature_order():
     dataset_builder = DatasetBuilder(
         labeling_scheme=labeling_scheme,
         seglen=15,
+        oversample=False
     )
 
     feats, labels, groups, df = dataset_builder.build_dataset_feats_labels_groups_df(
-        domains=['rel_pow', 'conn', 'ai', 'time', 'abs_pow'], )
+        domains=['rel_pow', 'conn', 'ai', 'time', 'abs_pow'])
 
     # Calculate ANOVA F-value and p-value for each feature
     f_values, p_values = f_classif(feats, labels)
@@ -54,6 +55,10 @@ def get_feature_order():
 
     # Return just the ordered feature names
     ordered_features = [feature for feature, _ in sorted_features]
+
+    print("Feature significance (p-values):")
+    for i, (feature, p_value) in enumerate(sorted_features):
+        print(f"{i + 1}. {feature}: {p_value:.4f}")
 
     return ordered_features
 
@@ -86,10 +91,10 @@ def plot_feature_significance(csv_data):
     # Create a dictionary mapping features to their order
     feature_order = {feat: idx for idx, feat in enumerate(ordered_features)}
 
-    # Sort features by the predefined order, then by frequency for features not in the order
+    # Sort features by the predefined order only, without considering frequency
     def get_sort_key(feature_item):
         feature, counts = feature_item
-        return (feature_order.get(feature, float('inf')), -sum(counts.values()))
+        return feature_order.get(feature, float('inf'))
 
     sorted_features = sorted(
         feature_classifier_counts.items(),
@@ -112,7 +117,7 @@ def plot_feature_significance(csv_data):
     all_classifiers = sorted(all_classifiers)
 
     # Create figure
-    plt.figure(figsize=(7, 10))
+    plt.figure(figsize=(7, 9))
 
     # Features are displayed from bottom to top in order of increasing significance
     # (most significant/lowest p-value at the top)
@@ -140,10 +145,10 @@ def plot_feature_significance(csv_data):
         bottom += reversed_data[:, i]
 
     # Customize plot with bigger text
-    plt.xlabel('Frequency of Selection', fontsize=14, loc='left')
+    plt.xlabel('Frequency of Selection', loc='left')
+    plt.ylabel('Feature significance (according to p-value)')
     plt.yticks(fontsize=10)  # Increase y-axis label size
     plt.xticks(fontsize=10)  # Increase x-axis label size
-    plt.title('Feature Significance', fontsize=14)
 
     # Add grid lines for better readability
     plt.grid(axis='x', linestyle='--', alpha=0.7)
@@ -157,12 +162,27 @@ def plot_feature_significance(csv_data):
     plt.xticks(range(0, int(max_count) + tick_interval, tick_interval))
 
     # Add legend
-    plt.legend(loc='lower right', bbox_to_anchor=(0.95, 0.05))
+    plt.legend(loc='lower right', bbox_to_anchor=(0.97, 0.01))
 
     plt.tight_layout()
 
     # Show plot instead of saving
     plt.show()
+
+    # Print 15 most frequently selected features
+    print("\n20 Most Frequently Selected Features:")
+    print("=====================================")
+
+    # Create a list of (feature, total_count) tuples
+    feature_counts = [(feat, sum(counts.values()))
+                      for feat, counts in pretty_features]
+
+    # Sort by total count in descending order
+    sorted_by_count = sorted(feature_counts, key=lambda x: x[1], reverse=True)
+
+    # Print the top 15 features
+    for i, (feature, count) in enumerate(sorted_by_count[:20], 1):
+        print(f"{i}. {feature}: {count}")
 
 
 def prettify_feature_name(feature):
