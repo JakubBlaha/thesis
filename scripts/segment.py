@@ -1,4 +1,3 @@
-# %%
 import glob
 import mne
 import numpy as np
@@ -108,6 +107,18 @@ def segment_dasps(path, seconds_per_epoch, overlap, res_dir):
 
 
 def segment_sad(path, seconds_per_epoch, overlap, res_dir):
+    """
+    Segment SAD (Social Anxiety Disorder) dataset recordings into fixed-length epochs.
+
+    Args:
+        path (str): Path to the SAD dataset recording file.
+        seconds_per_epoch (int): Duration of each epoch in seconds.
+        overlap (float): Overlap between consecutive epochs as a fraction.
+        res_dir (str): Directory to save the segmented epochs.
+
+    Returns:
+        None: The function saves the epoched data to a file.
+    """
     fif = mne.io.read_raw(path, preload=True)
 
     # # Print recording length
@@ -137,6 +148,19 @@ def segment_sad(path, seconds_per_epoch, overlap, res_dir):
 
 
 def validate_seglen(seglen):
+    """
+    Validate if the segment length is appropriate for the dataset.
+
+    Args:
+        seglen (int): Segment length in seconds.
+
+    Raises:
+        AssertionError: If segment length is invalid (not greater than 0, 
+                        greater than 30, or not a divisor of 30).
+
+    Returns:
+        None
+    """
     assert seglen > 0, "Segment length must be greater than 0"
 
     assert seglen <= 30, "Segment length must be less than or equal to 30"
@@ -147,6 +171,18 @@ def validate_seglen(seglen):
 
 
 def segment(seconds_per_epoch: int):
+    """
+    Main function to segment EEG recordings into fixed-length epochs.
+
+    This function processes all matching files and segments them based on their dataset type
+    (DASPS or SAD) using the appropriate segmentation function.
+
+    Args:
+        seconds_per_epoch (int): Duration of each epoch in seconds.
+
+    Returns:
+        None: Files are saved to the result directory.
+    """
     res_dir = os.path.join(
         script_dirname, f"../data/segmented/{seconds_per_epoch}s/raw/")
     os.makedirs(res_dir, exist_ok=True)
@@ -178,5 +214,3 @@ situations = parse_dasps_situations()
 
 if __name__ == "__main__":
     segment(10)
-
-# %%

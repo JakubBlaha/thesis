@@ -7,7 +7,7 @@ from autoreject_runner import run_autoreject
 from extract_features import extract_features_from_all_segments
 from training import train_models
 from deep import run_deep_learning
-from ensemble import train_model as run_ensemble  # Import the ensemble function
+from ensemble import train_model as run_ensemble
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -59,7 +59,7 @@ def main():
 
     available_commands = [
         "convert", "segment", "autoreject", "extract", "train",
-        "deep", "ensemble"]  # Add ensemble
+        "deep", "ensemble"]
 
     cmd_parsers = {}
 
@@ -120,7 +120,6 @@ def main():
         help="Comma-separated list of classifiers to use (e.g., 'svm-rbf,rf,knn')",
     )
 
-    # Add arguments for deep command
     cmd_parsers["deep"].add_argument(
         "--seglen",
         type=int,
@@ -135,7 +134,6 @@ def main():
         required=True
     )
 
-    # Add arguments for ensemble command
     cmd_parsers["ensemble"].add_argument(
         "--strategy",
         required=True,

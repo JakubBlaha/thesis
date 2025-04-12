@@ -1,3 +1,14 @@
+"""
+This script creates a horizontal bar chart visualizing the significance of EEG features 
+and how frequently they are selected by different classifiers. Features are:
+- Ordered by statistical significance (ANOVA F-test p-values)
+- Color-coded by classifier type
+
+The plot helps identify which EEG features (from domains like relative power, 
+connectivity, asymmetry index, time domain features, and absolute power) are most 
+important for classification the target variable.
+"""
+
 # %%
 import matplotlib.pyplot as plt
 import os

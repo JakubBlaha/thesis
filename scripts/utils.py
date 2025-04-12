@@ -1,4 +1,3 @@
-# %%
 import mne
 import numpy as np
 from sklearn.calibration import LabelEncoder
@@ -18,6 +17,12 @@ script_path = os.path.dirname(os.path.realpath(__file__))
 
 
 def get_extracted_seglens():
+    """
+    Get all available segment lengths from feature filenames.
+
+    Returns:
+        list[int]: List of segment lengths extracted from feature filenames.
+    """
     paths = glob.glob(os.path.join(features_dir, 'features_*s.csv'))
     basenames = [os.path.basename(i) for i in paths]
 
@@ -28,12 +33,31 @@ def get_extracted_seglens():
 
 
 def get_feats_csv_path(seglen: int):
+    """
+    Get the path to a features CSV file for a given segment length.
+
+    Args:
+        seglen (int): Segment length in seconds.
+
+    Returns:
+        str: Path to the features CSV file.
+    """
     return os.path.join(features_dir, f'features_{seglen}s.csv')
 
 
 def random_oversample(features, labels, groups, oversample_labels=None):
-    """Oversample the minority classs to balance the dataset."""
+    """
+    Oversample the minority classes to balance the dataset.
 
+    Args:
+        features (np.ndarray): Feature matrix with shape (n_samples, n_features).
+        labels (np.ndarray): Label array with shape (n_samples,).
+        groups (np.ndarray): Group identifiers with shape (n_samples,).
+        oversample_labels (list, optional): Specific labels to oversample. If None, all labels are oversampled.
+
+    Returns:
+        tuple: (oversampled_features, oversampled_labels, oversampled_groups)
+    """
     if oversample_labels is None:
         oversample_labels = np.unique(labels)
 
@@ -61,8 +85,15 @@ def random_oversample(features, labels, groups, oversample_labels=None):
 
 
 def normalize_eeg(data):
-    """Normalizes EEG data (samples, electrodes, time_points) channel-wise."""
+    """
+    Normalizes EEG data channel-wise using z-scores.
 
+    Args:
+        data (np.ndarray): EEG data with shape (samples, electrodes, time_points).
+
+    Returns:
+        np.ndarray: Normalized EEG data with the same shape.
+    """
     # Use axis=2 to normalize across the time points for each channel
     normalized_data = zscore(data, axis=2, ddof=0)  # ddof=0 for population std
 
@@ -70,11 +101,33 @@ def normalize_eeg(data):
 
 
 class DaspsLabeling(Enum):
+    """
+    Enumeration for DASPS labeling schemes.
+
+    Attributes:
+        HAM (int): HAM-A labeling scheme.
+        SAM (int): SAM labeling scheme.
+    """
     HAM = 0
     SAM = 1
 
 
 class LabelingScheme:
+    """
+    Configuration for mapping anxiety scores to discrete labels.
+
+    This class defines how raw anxiety scores from different assessment tools
+    (HAM-A, SAM, STAI) are converted to categorical labels (low/high anxiety).
+
+    Args:
+        dasps_labeling (DaspsLabeling): Labeling scheme for DASPS dataset.
+        lo_level_dasps (list, optional): DASPS scores considered low anxiety. Defaults to [0, 1].
+        hi_level_dasps (list, optional): DASPS scores considered high anxiety. Defaults to [2, 3].
+        lo_level_sad (list, optional): SAD scores considered low anxiety. Defaults to [0, 1].
+        hi_level_sad (list, optional): SAD scores considered high anxiety. Defaults to [2, 3].
+        merge_control (bool, optional): Whether to merge control groups. Defaults to True.
+    """
+
     def __init__(
             self, dasps_labeling: DaspsLabeling, *, lo_level_dasps=[0, 1],
             hi_level_dasps=[2, 3],
@@ -93,6 +146,20 @@ class LabelingScheme:
 
 
 class DatasetBuilder:
+    """
+    Creates datasets for machine learning from anxiety EEG data.
+
+    This class handles the loading, preprocessing, and labeling of EEG data
+    for anxiety classification tasks, supporting different labeling schemes,
+    feature domains, and dataset modes.
+
+    Args:
+        labeling_scheme (LabelingScheme): Scheme for converting anxiety scores to labels.
+        seglen (int): Segment length in seconds for the EEG data.
+        mode (str, optional): Dataset mode, one of "both", "dasps", or "sad". Defaults to "both".
+        oversample (bool, optional): Whether to oversample minority classes. Defaults to True.
+        debug (bool, optional): Whether to print debug information. Defaults to False.
+    """
     _feat_names: list[str] = []
     _feat_domain_prefix = ['time', 'abs_pow', 'rel_pow', 'conn', 'ai']
 
@@ -110,9 +177,24 @@ class DatasetBuilder:
         self.debug = debug
 
     def _drop_redundant_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Remove non-feature columns from the dataframe.
+
+        Args:
+            df (pd.DataFrame): Input dataframe.
+
+        Returns:
+            pd.DataFrame: Dataframe with redundant columns removed.
+        """
         return df.drop(columns=['dataset', 'ham', 'sam', 'stai', 'subject'])
 
     def _get_seglen_df(self) -> pd.DataFrame:
+        """
+        Load the features dataframe for the specified segment length.
+
+        Returns:
+            pd.DataFrame: Dataframe containing features for the segment length.
+        """
         path = get_feats_csv_path(self.seglen)
         df = pd.read_csv(path)
 
@@ -122,6 +204,16 @@ class DatasetBuilder:
                          domains:
                          list[str] | None = None,
                          p_val_thresh=None) -> pd.DataFrame:
+        """
+        Build a labeled dataset with selected feature domains.
+
+        Args:
+            domains (list[str], optional): Feature domains to include. Defaults to ["time", "rel_pow", "conn", "ai"].
+            p_val_thresh (float, optional): Threshold for p-value filtering of features. Defaults to None.
+
+        Returns:
+            pd.DataFrame: DataFrame with labeled data and selected features.
+        """
         if domains is None:
             domains = ["time", "rel_pow", "conn", "ai"]
 
@@ -143,6 +235,16 @@ class DatasetBuilder:
 
     def build_dataset_feats_labels_groups_df(
             self, domains: list[str] | None = None, p_val_thresh=None):
+        """
+        Build dataset arrays for machine learning (features, labels, groups).
+
+        Args:
+            domains (list[str], optional): Feature domains to include. Defaults to None.
+            p_val_thresh (float, optional): Threshold for p-value filtering of features. Defaults to None.
+
+        Returns:
+            tuple: (features, labels, groups, dataframe) - NumPy arrays and original dataframe.
+        """
         df = self.build_dataset_df(domains, p_val_thresh)
 
         group_encoder = LabelEncoder()
@@ -212,10 +314,26 @@ class DatasetBuilder:
         return features, labels, groups, df
 
     def get_feat_names(self):
+        """
+        Get names of features in the current dataset.
+
+        Returns:
+            list[str]: Feature names.
+        """
         return self._feat_names
 
     def _keep_feat_cols(
             self, df: pd.DataFrame, domains: list[str]) -> pd.DataFrame:
+        """
+        Filter dataframe to keep only columns from specified domains.
+
+        Args:
+            df (pd.DataFrame): Input dataframe.
+            domains (list[str]): Feature domains to include.
+
+        Returns:
+            pd.DataFrame: Filtered dataframe with only columns from specified domains.
+        """
         print("Keeping domains:", domains)
 
         for d in domains:
@@ -236,11 +354,30 @@ class DatasetBuilder:
         return df[cols]
 
     def _get_feat_col_names(self, df: pd.DataFrame) -> list[str]:
+        """
+        Get names of feature columns in the dataframe.
+
+        Args:
+            df (pd.DataFrame): Input dataframe.
+
+        Returns:
+            list[str]: Names of feature columns.
+        """
         return [col for col in df.columns if any(
             [col.startswith(d) for d in self._feat_domain_prefix])]
 
     def _keep_significant_cols(
             self, df: pd.DataFrame, p_val_thresh: float) -> pd.DataFrame:
+        """
+        Filter dataframe to keep only columns with significant differences between groups.
+
+        Args:
+            df (pd.DataFrame): Input dataframe.
+            p_val_thresh (float): P-value threshold for significance.
+
+        Returns:
+            pd.DataFrame: Filtered dataframe with only significant features.
+        """
         low_gad = df[df['label'] == "LO_GAD"].copy()
         gad = df[df['label'] == "HI_GAD"].copy()
         low_sad = df[df['label'] == "LO_SAD"].copy()
@@ -272,12 +409,34 @@ class DatasetBuilder:
         return df
 
     def _validate_mode(self, mode: str):
+        """
+        Validate that the mode is supported.
+
+        Args:
+            mode (str): Mode to validate, one of "both", "dasps", or "sad".
+
+        Raises:
+            AssertionError: If mode is not valid.
+        """
         _valid_modes = ["both", "dasps", "sad"]
 
         assert mode in _valid_modes, "mode must be one of " + str(
             _valid_modes)
 
     def _keep_mode_rows(self, df: pd.DataFrame, mode: str) -> pd.DataFrame:
+        """
+        Filter dataframe to keep only rows matching the specified mode.
+
+        Args:
+            df (pd.DataFrame): Input dataframe.
+            mode (str): Dataset mode, one of "both", "dasps", or "sad".
+
+        Returns:
+            pd.DataFrame: Filtered dataframe with only rows matching the mode.
+
+        Raises:
+            ValueError: If mode is not valid.
+        """
         self._validate_mode(mode)
 
         if mode == "both":
@@ -290,6 +449,15 @@ class DatasetBuilder:
         raise ValueError(f'Invalid mode: {mode}')
 
     def _label_rows(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Add label column to dataframe based on anxiety scores.
+
+        Args:
+            df (pd.DataFrame): Input dataframe.
+
+        Returns:
+            pd.DataFrame: Dataframe with added label column.
+        """
         df = df.copy()
 
         # Add a column for label
@@ -310,6 +478,18 @@ class DatasetBuilder:
         return df
 
     def _get_dasps_label(self, row: pd.Series) -> str:
+        """
+        Get the label for a DASPS dataset row.
+
+        Args:
+            row (pd.Series): Row from DASPS dataset.
+
+        Returns:
+            str: Label for the row (e.g., "LO_GAD", "HI_GAD").
+
+        Raises:
+            ValueError: If the anxiety score is invalid or labeling scheme is invalid.
+        """
         if self._labeling_scheme.dasps_labeling.value == DaspsLabeling.HAM.value:
             if row['ham'] in self._labeling_scheme.lo_level_dasps:
                 return "LO_GAD"
@@ -329,6 +509,18 @@ class DatasetBuilder:
         raise ValueError('Invalid labeling scheme')
 
     def _get_sad_label(self, row: pd.Series) -> str:
+        """
+        Get the label for a SAD dataset row.
+
+        Args:
+            row (pd.Series): Row from SAD dataset.
+
+        Returns:
+            str: Label for the row (e.g., "LO_SAD", "HI_SAD").
+
+        Raises:
+            ValueError: If the anxiety score is invalid.
+        """
         severity = row['stai']
 
         if severity in self._labeling_scheme.lo_level_sad:
@@ -339,6 +531,12 @@ class DatasetBuilder:
         raise ValueError(f'Invalid SAD severity: {severity}')
 
     def _get_segment_files(self):
+        """
+        Get paths to all segment files for the current segment length.
+
+        Returns:
+            list[str]: Paths to segment files.
+        """
         clean_segdir_path = os.path.join(
             script_path, f'../data/segmented/{self.seglen}s/clean')
         files = glob.glob(f'{clean_segdir_path}/*-epo.fif')
@@ -347,9 +545,24 @@ class DatasetBuilder:
         return files
 
     def _get_subj_id_from_path(self, path: str) -> int:
+        """
+        Extract subject ID from a file path.
+
+        Args:
+            path (str): Path to a segment file.
+
+        Returns:
+            int: Subject ID.
+        """
         return int(os.path.basename(path).strip('-epo.fif').strip('S'))
 
     def get_subj_ids(self) -> list[int]:
+        """
+        Get all subject IDs from segment files.
+
+        Returns:
+            list[int]: List of subject IDs.
+        """
         files = self._get_segment_files()
         subj_ids = [self._get_subj_id_from_path(f) for f in files]
 
@@ -368,15 +581,6 @@ class DatasetBuilder:
 
         for index, f in enumerate(files):
             epochs = mne.read_epochs(f, preload=True, verbose=False)
-            # epochs.filter(l_freq=4, h_freq=40, h_trans_bandwidth=2)
-
-            # if index == 0:
-            #     print(f)
-
-            #     fig = epochs.plot_psd(fmin=0, fmax=64)
-            #     fig.set_size_inches(20, 12)
-
-            #     plt.show()
 
             for index, epoch in enumerate(epochs):
                 metadata = epochs.metadata.iloc[index]
@@ -416,6 +620,20 @@ class DatasetBuilder:
     def build_deep_datasets_train_test(
             self, *, insert_ch_dim: bool, test_subj_ids: list[int],
             device=None):
+        """
+        Build PyTorch datasets for deep learning models.
+
+        Args:
+            insert_ch_dim (bool): Whether to insert a channel dimension in the data.
+            test_subj_ids (list[int]): Subject IDs to use for testing.
+            device (torch.device, optional): Device to load tensors to. Defaults to None.
+
+        Returns:
+            tuple: (train_dataset, test_dataset) - PyTorch datasets for training and testing.
+
+        Raises:
+            ValueError: If no epochs are found.
+        """
         if self._preloaded_data is None:
             self.preload_epochs()
 
@@ -498,6 +716,18 @@ class DatasetBuilder:
 
 
 class TorchDeepDataset(Dataset):
+    """
+    PyTorch Dataset for EEG deep learning.
+
+    Provides EEG data and labels for deep learning models in PyTorch format.
+
+    Args:
+        data (np.ndarray): EEG data.
+        labels (np.ndarray): Labels for each EEG sample.
+        insert_ch_dim (bool): Whether to insert a channel dimension.
+        device (torch.device, optional): Device to load tensors to. Defaults to None.
+    """
+
     def __init__(self, data, labels, insert_ch_dim: bool, device=None) -> None:
         # Add channel dimension
         if insert_ch_dim:
@@ -509,9 +739,24 @@ class TorchDeepDataset(Dataset):
         self.labels = torch.from_numpy(labels).long().to(device)
 
     def __len__(self):
+        """
+        Get the number of samples in the dataset.
+
+        Returns:
+            int: Number of samples.
+        """
         return len(self.labels)
 
     def __getitem__(self, index):
+        """
+        Get a sample from the dataset.
+
+        Args:
+            index (int): Index of the sample.
+
+        Returns:
+            tuple: (epoch, label) - EEG data and its label.
+        """
         return self.epochs[index], self.labels[index]
 
 
@@ -533,5 +778,3 @@ if __name__ == "__main__":
     # builder = DatasetBuilder(labeling_scheme, seglen=10, mode="both", debug=True)
 
     # train, test = builder.build_deep_datasets_train_test(insert_ch_dim=False, test_subj_ids=[101, 102, 103])
-
-# %%

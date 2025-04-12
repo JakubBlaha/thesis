@@ -1,9 +1,23 @@
+"""
+This script creates topographical plots visualizing EEG features on a standard 10-20
+electrode layout. It generates two types of plots:
+
+1. Features by Domain: Shows which electrodes contribute to different feature domains
+   (time domain, absolute power, relative power, asymmetry index) using color-coded
+   half-circles overlaid on electrode positions.
+
+2. Features by Frequency: Shows which electrodes contribute to different frequency bands
+   (theta, alpha-1, alpha-2, beta, gamma) using color-coded half-circles.
+
+These plots provide a spatial representation of which brain regions and frequency bands
+are most relevant for classification according to the selected features.
+"""
+
 # %%
 import mne
 import matplotlib.pyplot as plt
-from matplotlib.patches import Circle, Arc
+from matplotlib.patches import Arc
 import pandas as pd
-import re
 from matplotlib import rcParams
 import os
 

@@ -1,4 +1,3 @@
-# %%
 import glob
 import os
 import mne
@@ -40,6 +39,22 @@ segmented_path = os.path.abspath(
 
 
 def get_epoch_features(epoch):
+    """
+    Extract various features from a single EEG epoch.
+
+    Computes time complexity features, band power features, connectivity features,
+    and asymmetry index features for the given epoch.
+
+    Parameters
+    ----------
+    epoch : array-like
+        A single EEG epoch with shape (n_channels, n_times)
+
+    Returns
+    -------
+    dict
+        Dictionary containing all extracted features
+    """
     d = {}
 
     epoch = np.expand_dims(epoch, axis=0)
@@ -139,6 +154,20 @@ def get_epoch_features(epoch):
 
 
 def get_features_of_all_epochs(path) -> pd.DataFrame:
+    """
+    Extract features from all epochs in a file and return as a DataFrame.
+
+    Parameters
+    ----------
+    path : str
+        Path to the epochs file (.fif format)
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame containing features for all epochs with metadata
+        (subject ID, dataset, labels, etc.)
+    """
     print(path)
 
     epochs = mne.read_epochs(path)
@@ -190,6 +219,23 @@ def get_features_of_all_epochs(path) -> pd.DataFrame:
 
 
 def extract_features_from_all_segments(seglen=None):
+    """
+    Extract features from all segmented EEG data and save to CSV files.
+
+    Processes EEG data segmented at different lengths, extracts features
+    for each segment, and saves the results to CSV files. Files are saved
+    as 'features_{seglen}s.csv' in the output directory.
+
+    Parameters
+    ----------
+    seglen : int, optional
+        If provided, only process segments of this specific length (in seconds).
+        If None, process all available segment lengths.
+
+    Returns
+    -------
+    None
+    """
     pattern = os.path.join(segmented_path, "*/clean/*-epo.fif")
     paths_to_subject_epochs = glob.glob(pattern)
 

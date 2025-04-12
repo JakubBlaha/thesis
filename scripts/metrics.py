@@ -1,4 +1,25 @@
-# %%
+"""
+Machine Learning Metrics Calculator
+
+This script calculates and outputs various machine learning metrics from a CSV file 
+containing predicted and actual labels. It can also generate a confusion matrix 
+visualization and save it as a PDF.
+
+Usage:
+    python metrics.py --file path/to/data.csv --title "Model Name"
+
+Input:
+    - CSV file with 'predicted' and 'actual' columns
+    - Optional title for the confusion matrix plot
+
+Output:
+    - Printed metrics including accuracy, balanced accuracy, Cohen's kappa,
+      precision, recall, and F1 scores
+    - Confusion matrix visualization saved as PDF (if title is provided)
+
+Example:
+    python metrics.py --file results.csv --title "Random Forest Model"
+"""
 import pandas as pd
 import os
 import numpy as np

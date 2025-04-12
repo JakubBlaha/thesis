@@ -30,6 +30,7 @@ def get_display_name(classifier_name):
 
 
 def gen_seglens_plot():
+    # These need to be replaced in case the chart needs to be generated
     fnames = [
         'classif_20250301_131128_mode-both_seglens-30_domains-rel_pow-conn-ai-time-abs_pow_label-ham_cv-logo_os.csv',
         'classif_20250301_133310_mode-both_seglens-15_domains-rel_pow-conn-ai-time-abs_pow_label-ham_cv-logo_os.csv',

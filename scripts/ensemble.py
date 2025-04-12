@@ -1,8 +1,15 @@
+"""
+Ensemble learning module for physiological data classification.
+
+This script implements ensemble learning strategies (voting and stacking) for classification
+of physiological signals. It supports various machine learning classifiers as base estimators
+and provides hyperparameter optimization through grid search.
+"""
+
 import os
 import numpy as np
 import pandas as pd
 import datetime
-import argparse
 
 from sklearn.discriminant_analysis import StandardScaler
 from sklearn.ensemble import RandomForestClassifier, VotingClassifier, StackingClassifier, GradientBoostingClassifier
@@ -14,12 +21,16 @@ from sklearn import svm
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
-
-# Assume these are defined in your project (or replace with your own dataset loading)
 from utils import DatasetBuilder, LabelingScheme, DaspsLabeling
 
 
-# Define the available final classifiers and their parameter grids
+"""
+Dictionary of final classifiers for stacking ensemble with their parameter grids.
+
+Keys are classifier names, and values are dictionaries containing:
+- 'classifier': The sklearn classifier instance
+- 'param_grid': Parameters to search during grid search optimization
+"""
 FINAL_CLASSIFIERS = {
     "logistic": {
         "classifier": LogisticRegression(random_state=42),
@@ -61,6 +72,36 @@ FINAL_CLASSIFIERS = {
 
 def train_model(*, seglen, mode, domains, strategy,
                 final_classifier="logistic", oversample=True, seed=42):
+    """
+    Train and evaluate an ensemble model with specified configuration.
+
+    Builds a dataset, trains an ensemble classifier (voting or stacking), performs
+    hyperparameter optimization, and evaluates the model using leave-one-group-out
+    cross-validation. Results are saved to a CSV file.
+
+    Parameters
+    ----------
+    seglen : int
+        Segment length for data preprocessing.
+    mode : str
+        Dataset building mode.
+    domains : list
+        List of domains to include in dataset.
+    strategy : str
+        Ensemble strategy, either "voting" or "stacking".
+    final_classifier : str, default="logistic"
+        Final classifier type for stacking ("logistic", "rf", "mlp", or "gb").
+        Ignored when strategy is "voting".
+    oversample : bool, default=True
+        Whether to apply oversampling to balance the dataset.
+    seed : int, default=42
+        Random seed for reproducibility.
+
+    Returns
+    -------
+    None
+        Results and model parameters are saved to a CSV file in '../data/results'.
+    """
     # Set seed for reproducibility
     np.random.seed(seed)
 
@@ -199,48 +240,3 @@ def train_model(*, seglen, mode, domains, strategy,
             f.write(f"{param},{value}\n")
 
     print("Saved predictions and parameters to:", filename)
-
-
-# Example usage:
-if __name__ == '__main__':
-    # Set up command-line argument parsing
-    parser = argparse.ArgumentParser(
-        description='Train an ensemble classifier model.')
-    parser.add_argument(
-        '--strategy', '-s', type=str, required=True,
-        choices=['voting', 'stacking'],
-        help='Ensemble strategy: "voting" for VotingClassifier or "stacking" for StackingClassifier')
-    parser.add_argument('--seglen', type=int, default=15,
-                        help='Segment length (default: 15)')
-    parser.add_argument('--mode', type=str, default="both",
-                        help='Mode (default: "both")')
-    parser.add_argument('--domains', type=str, nargs='+',
-                        default=["rel_pow", "conn", "ai", "time", "abs_pow"],
-                        help='Domains to include')
-    parser.add_argument('--oversample', action='store_true',
-                        help='Whether to oversample the dataset')
-    parser.add_argument(
-        '--no-oversample', action='store_false', dest='oversample',
-        help='Disable oversampling')
-    parser.add_argument(
-        '--final-classifier', '-fc', type=str,
-        choices=list(FINAL_CLASSIFIERS.keys()),
-        help='Final classifier for stacking')
-    parser.add_argument(
-        '--seed', type=int, default=42,
-        help='Random seed for reproducible results (default: 42)')
-    parser.set_defaults(oversample=True)
-
-    args = parser.parse_args()
-
-    # Train a single ensemble model with the specified strategy
-    print(
-        f"\nTraining ensemble classifier with strategy: {args.strategy}, seglen: {args.seglen}")
-    train_model(
-        seglen=args.seglen,
-        mode=args.mode,
-        domains=args.domains,
-        strategy=args.strategy,
-        final_classifier=args.final_classifier,
-        oversample=args.oversample,
-        seed=args.seed)

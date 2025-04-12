@@ -1,4 +1,3 @@
-# %%
 import os
 import datetime
 import numpy as np
@@ -18,13 +17,19 @@ import pandas as pd
 from utils import DatasetBuilder, LabelingScheme, DaspsLabeling
 from tabulate import tabulate
 
+verbosity = 10
+
 script_dir = os.path.dirname(__file__)
 data_dir = os.path.join(script_dir, '../data')
 results_dir = os.path.join(data_dir, 'results')
 
 os.makedirs(results_dir, exist_ok=True)
 
-# TODO unify feature ranges
+# This was used for hyperparameter tuning.
+# The hypertparameter ranges were edited here in the source code.
+# These hyperparameters are not an accurate representation of what space
+# was actually searched. The hyperparameters below are only a subset
+# of the hyperparameters that were actually searched.
 
 GRID = {
     "svm-rbf": {
@@ -160,6 +165,48 @@ GRID = {
 def train_model(
         *, classif, seglen, mode, domains, dasps_labeling_scheme="ham",
         oversample=True, cv='logo'):
+    """
+    Train a single machine learning model with the specified configuration.
+
+    This function builds a dataset, performs feature selection, trains the model using
+    grid search for hyperparameter tuning, and evaluates model performance using
+    cross-validation.
+
+    Parameters
+    ----------
+    classif : str
+        Name of the classifier to use (must be a key in the GRID dictionary).
+    seglen : int
+        Segment length in seconds to use for feature extraction.
+    mode : str
+        Mode of data processing (e.g., 'concat', 'mean').
+    domains : list of str
+        List of data domains to include in the dataset.
+    dasps_labeling_scheme : str, optional
+        The labeling scheme to use, either 'ham' or 'sam', default is 'ham'.
+    oversample : bool, optional
+        Whether to use oversampling to balance class distribution, default is True.
+    cv : str, optional
+        Cross-validation strategy, either 'logo' (Leave One Group Out) or 'skf' 
+        (Stratified K-Fold), default is 'logo'.
+
+    Returns
+    -------
+    float
+        Mean accuracy score from cross-validation.
+    float
+        Mean F1 score (macro-averaged).
+    float
+        Mean precision score (macro-averaged).
+    float
+        Mean recall score (macro-averaged).
+    str
+        String representation of the best hyperparameters.
+    int
+        Number of selected features.
+    str
+        Comma-separated list of selected feature names.
+    """
     if dasps_labeling_scheme == "ham":
         _labeling_scheme = LabelingScheme(DaspsLabeling.HAM)
     elif dasps_labeling_scheme == "sam":
@@ -186,8 +233,6 @@ def train_model(
         _cv = LeaveOneGroupOut()
     elif cv == 'skf':
         _cv = StratifiedKFold(n_splits=10)
-
-    # splits = kfold.get_n_splits(features, labels)
 
     param_grid = GRID[classif]["params"]
 
@@ -371,6 +416,36 @@ def train_model(
 def train_models(
         *, seglens, mode, domains, dasps_labeling_scheme, oversample, cv,
         classifiers):
+    """
+    Train multiple models with different configurations and save results to a CSV file.
+
+    This function iterates through combinations of classifiers and segment lengths,
+    trains models for each combination, and compiles the results into a DataFrame
+    which is then saved as a CSV file.
+
+    Parameters
+    ----------
+    seglens : list of int
+        List of segment lengths to use for training.
+    mode : str
+        Mode of data processing (e.g., 'concat', 'mean').
+    domains : list of str
+        List of data domains to include in the dataset.
+    dasps_labeling_scheme : str
+        The labeling scheme to use, either 'ham' or 'sam'.
+    oversample : bool
+        Whether to use oversampling to balance class distribution.
+    cv : str
+        Cross-validation strategy, either 'logo' (Leave One Group Out) or 'skf' 
+        (Stratified K-Fold).
+    classifiers : list of str
+        List of classifier names to train (must be keys in the GRID dictionary).
+
+    Returns
+    -------
+    None
+        Results are saved to a CSV file in the results directory.
+    """
     results = []
 
     # Validate that all requested classifiers exist in GRID
@@ -425,6 +500,3 @@ def train_models(
     df_results.to_csv(csv_path, index=False)
 
     print("Results saved to:", csv_path)
-
-
-verbosity = 10

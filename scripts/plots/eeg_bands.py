@@ -1,3 +1,8 @@
+"""
+This script generates a plot visualizing EEG signals in individual frequency bands.
+The individual bands (Delta, Theta, Alpha, Beta, Gamma) are obtained by filtering the original signal.
+"""
+
 import mne
 import numpy as np
 import matplotlib.pyplot as plt

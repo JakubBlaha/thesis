@@ -1,4 +1,14 @@
-# %%
+"""
+Deep Learning Module for EEG Classification
+
+This module provides functionality for training, evaluating, and comparing deep learning models
+(CNN and LSTM) for EEG signal classification. It includes functions for cross-validation,
+model configuration, and result visualization.
+
+The module supports different segmentation lengths and model architectures, with configurable
+hyperparameters and evaluation metrics.
+"""
+
 from utils import DatasetBuilder, LabelingScheme, DaspsLabeling
 import torch
 import torch.nn as nn
@@ -24,20 +34,22 @@ from models.lstm import EEG_LSTMClassifier
 
 import random
 
+# Test mode flag - reduces computation for quick verification
 TEST_RUN = False
 
-# Define LSTM parameters globally
+# LSTM configuration parameters
 lstm_enhanced = False
 
-# Global control variables
-show_plots = False
-merge_control = True
-oversample = True
-mode = "both"
+# Global control variables for experiment configuration
+show_plots = False         # Controls visualization of results
+merge_control = True       # Whether to merge control conditions
+oversample = True          # Whether to oversample minority classes
+mode = "both"              # Data processing mode
 
 device = None
 use_gpu = True
 
+# LSTM model hyperparameters
 lstm_params = {
     "input_size": 14,
     "hidden_sizes": [45, 30],
@@ -68,6 +80,18 @@ if TEST_RUN:
 
 def compile_model(
         model, learning_rate=0.001, class_weights=None, l1_lambda=0.0):
+    """
+    Configures model with loss function and optimizer.
+
+    Args:
+        model: The neural network model to compile
+        learning_rate: Learning rate for optimizer (default: 0.001)
+        class_weights: Optional weights for handling class imbalance (default: None)
+        l1_lambda: L1 regularization parameter (default: 0.0)
+
+    Returns:
+        tuple: (criterion, optimizer) - the loss function and optimizer
+    """
     if class_weights is not None:
         class_weights = torch.tensor(
             class_weights, dtype=torch.float).to(device)
@@ -80,6 +104,17 @@ def compile_model(
 
 
 def evaluate_model(model, test_loader, criterion):
+    """
+    Evaluates model performance on a test dataset.
+
+    Args:
+        model: The model to evaluate
+        test_loader: DataLoader containing test data
+        criterion: Loss function
+
+    Returns:
+        tuple: (all_predictions, all_targets) - predictions and ground truth
+    """
     model.eval()
 
     all_predictions = []
@@ -100,6 +135,25 @@ def train_model(
         model, train_dataset, test_dataset, *, max_epochs=100,
         learning_rate=0.001, batch_size=32, enable_profiling=False, patience=5,
         min_epochs=30, class_weights=None, l1_lambda=0.0):
+    """
+    Trains a deep learning model with early stopping and optional profiling.
+
+    Args:
+        model: The neural network model to train
+        train_dataset: Dataset for training
+        test_dataset: Dataset for validation
+        max_epochs: Maximum number of training epochs (default: 100)
+        learning_rate: Learning rate for optimizer (default: 0.001)
+        batch_size: Mini-batch size for training (default: 32)
+        enable_profiling: Whether to profile training performance (default: False)
+        patience: Number of epochs to wait for improvement before early stopping (default: 5)
+        min_epochs: Minimum number of epochs to train regardless of early stopping (default: 30)
+        class_weights: Optional weights for handling class imbalance (default: None)
+        l1_lambda: L1 regularization parameter (default: 0.0)
+
+    Returns:
+        tuple: ((all_predictions, all_targets), test_acc) - predictions, ground truth and test accuracy
+    """
     print("Train samples: ", len(train_dataset))
     print("Test samples: ", len(test_dataset))
 
@@ -204,11 +258,18 @@ def train_model(
 
 
 def seed():
+    """
+    Sets random seeds for reproducibility across PyTorch and NumPy.
+    """
     torch.manual_seed(0)
     np.random.seed(0)
 
 
 def setup_device():
+    """
+    Configures the device (CPU, CUDA, or MPS) for model training.
+    Sets the global 'device' variable.
+    """
     global device
 
     if torch.backends.mps.is_available() and use_gpu:
@@ -222,6 +283,15 @@ def setup_device():
 
 
 def plot_training_results(train_losses, val_losses, train_acc, test_acc):
+    """
+    Plots training and validation metrics if show_plots is enabled.
+
+    Args:
+        train_losses: List of training loss values
+        val_losses: List of validation loss values
+        train_acc: List of training accuracy values
+        test_acc: List of test accuracy values
+    """
     if not show_plots:
         return
 
@@ -271,6 +341,18 @@ model_configs = {
 def leave_subjects_out_cv(
         *, test_subj_ids, labeling_scheme,
         dataset_builder: DatasetBuilder, model_type):
+    """
+    Performs leave-subjects-out cross-validation for model evaluation.
+
+    Args:
+        test_subj_ids: List of subject IDs to use as test set
+        labeling_scheme: Scheme for labeling the data
+        dataset_builder: DatasetBuilder instance to prepare the data
+        model_type: Type of model to use ('cnn' or 'lstm')
+
+    Returns:
+        tuple or None: Model training results or None if test set is empty
+    """
     print("Test subjects: ", test_subj_ids)
 
     # Get current model config
@@ -308,6 +390,14 @@ def leave_subjects_out_cv(
 
 
 def gen_conf_matrix(all_targets, all_predictions, int_to_label: dict):
+    """
+    Generates and displays a confusion matrix if show_plots is enabled.
+
+    Args:
+        all_targets: List of ground truth labels
+        all_predictions: List of model predictions
+        int_to_label: Dictionary mapping integers to class labels
+    """
     if not show_plots:
         return
 
@@ -327,6 +417,18 @@ def save_results_to_csv(
         *, mean_accuracy, mean_test_loss=None, max_best_epoch=None,
         mean_best_epoch=None, model_config=None,
         seglen_value=None, model_type=None):
+    """
+    Saves experiment results to a CSV file.
+
+    Args:
+        mean_accuracy: Mean accuracy across all test folds
+        mean_test_loss: Mean test loss (default: None)
+        max_best_epoch: Maximum number of best epochs (default: None)
+        mean_best_epoch: Mean of best epochs across folds (default: None)
+        model_config: Model configuration dictionary (default: None)
+        seglen_value: Segment length in seconds (default: None)
+        model_type: Type of model used (default: None)
+    """
     # Create directory if it doesn't exist
     result_dir = os.path.join(
         os.path.dirname(os.path.dirname(__file__)),
@@ -372,7 +474,7 @@ def run_deep_learning(seglen: int, model_type_param: str):
     Run the deep learning process with the specified parameters.
 
     Args:
-        seglen_param: Segment length in seconds
+        seglen: Segment length in seconds
         model_type_param: Model type ('lstm' or 'cnn')
     """
     setup_device()
@@ -476,9 +578,7 @@ def run_deep_learning(seglen: int, model_type_param: str):
 
 
 if __name__ == "__main__":
-    # seglens = [1, 2, 3, 5]
-    # seglens = [3, 5, 10, 15, 30]
-    seglens = [1]
+    seglens = [1, 2, 3, 5]
 
     for seglen in seglens:
         run_deep_learning(seglen=seglen, model_type_param="lstm")

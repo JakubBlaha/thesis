@@ -1,3 +1,11 @@
+"""
+Confusion Matrix Generation Script
+
+This script serves for creating confusion matrices for the thesis document.
+It generates and saves visualization of model performance for different
+architectures (Enhanced LSTM, Basic LSTM, CNN) as PDF files.
+"""
+
 # %%
 import numpy as np
 import matplotlib.pyplot as plt
@@ -106,5 +114,3 @@ conf_matrix = [
 
 fig, ax = plot_confusion_matrix(conf_matrix, labels, title='CNN Model')
 plt.savefig(os.path.join(plot_dir, 'conf_matrix_cnn_final.pdf'))
-
-# %%
