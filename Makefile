@@ -10,5 +10,5 @@ ARCHIVES_DIR = archives
 pack:
 	@mkdir -p $(ARCHIVES_DIR)
 	@echo "Packing repository contents..."
-	@git ls-files | tar -czf $(ARCHIVES_DIR)/$(ARCHIVE_NAME)-$(TIMESTAMP).tar.gz -T -
-	@echo "Archive created: $(ARCHIVES_DIR)/$(ARCHIVE_NAME)-$(TIMESTAMP).tar.gz"
+	@git ls-files | zip -q $(ARCHIVES_DIR)/$(ARCHIVE_NAME)-$(TIMESTAMP).zip -@
+	@echo "Archive created: $(ARCHIVES_DIR)/$(ARCHIVE_NAME)-$(TIMESTAMP).zip"
