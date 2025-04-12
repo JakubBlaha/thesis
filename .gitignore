@@ -171,3 +171,5 @@ data/*
 data/results/*
 
 figures
+helpers
+archives

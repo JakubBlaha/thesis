@@ -1,3 +1,0 @@
-python3 scripts/metrics.py --file /home/jakub/projects/thesis/data/results/deep_20250314_231131_predictions.csv --title 'CNN Model'
-python3 scripts/metrics.py --file /home/jakub/projects/thesis/data/results/deep_20250315_115146_predictions.csv --title 'Enhanced LSTM Model'
-python3 scripts/metrics.py --file /home/jakub/projects/thesis/data/results/deep_20250315_133842_predictions.csv --title 'Basic LSTM Model'
