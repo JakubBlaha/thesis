@@ -59,7 +59,7 @@ GRID = {
             "classif__gamma": [10**i for i in range(-5, 0)],
             "classif__kernel": ['rbf'],
             "classif__max_iter": [10_000],
-            "sel__k": [60],
+            "sel__k": [20],
             # "sel__k": [5, 8, 10, 20, 30, 40, 60, 100],
             "classif__class_weight": ['balanced'],
         },
@@ -70,7 +70,7 @@ GRID = {
         "params": {
             "classif__C": [10**i for i in range(-3, 4)],
             "classif__max_iter": [5000],
-            "sel__k": [5, 8, 10, 20, 30, 40, 60, "all"]
+            "sel__k": [5, 8, 10, 20, 30, 40, 60, "all"],
         }
     },
     # "svm-lin": {

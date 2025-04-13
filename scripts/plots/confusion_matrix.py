@@ -10,7 +10,6 @@ architectures (Enhanced LSTM, Basic LSTM, CNN) as PDF files.
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-import matplotlib as mpl
 import os
 
 plot_dir = os.path.join(
@@ -80,9 +79,10 @@ def plot_confusion_matrix(conf_matrix, class_labels, title=None,
     return fig, ax
 
 
+labels = ['GAD', 'SAD', 'Control']
+
 # %%
 # Enhanced LSTM
-labels = ['GAD', 'SAD', 'Control']
 conf_matrix = [
     [1491,   83,  744],
     [45, 1964,  391],
@@ -114,3 +114,15 @@ conf_matrix = [
 
 fig, ax = plot_confusion_matrix(conf_matrix, labels, title='CNN Model')
 plt.savefig(os.path.join(plot_dir, 'conf_matrix_cnn_final.pdf'))
+
+# %%
+# CNN
+conf_matrix = [
+    [97,  64,  0],
+    [2, 166,  0],
+    [24, 41,  176]
+]
+
+fig, ax = plot_confusion_matrix(
+    conf_matrix, labels, title='SVM-RBF Confusion matrix')
+plt.savefig(os.path.join(plot_dir, 'conf_matrix_svm_final.pdf'))
