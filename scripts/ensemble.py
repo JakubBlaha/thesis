@@ -1,3 +1,5 @@
+# Author: Jakub Bláha, xblaha36
+
 """
 Ensemble learning module for physiological data classification.
 

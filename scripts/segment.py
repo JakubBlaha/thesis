@@ -1,3 +1,5 @@
+# Author: Jakub Bláha, xblaha36
+
 import glob
 import mne
 import numpy as np

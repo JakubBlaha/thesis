@@ -1,3 +1,5 @@
+# Author: Jakub Bláha, xblaha36
+
 """
 Constants module for EEG data processing across multiple anxiety datasets.
 

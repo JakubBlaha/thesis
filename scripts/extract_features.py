@@ -1,3 +1,5 @@
+# Author: Jakub Bláha, xblaha36
+
 import glob
 import os
 import mne

@@ -1,3 +1,5 @@
+# Author: Jakub Bláha, xblaha36
+
 import os
 import datetime
 import numpy as np

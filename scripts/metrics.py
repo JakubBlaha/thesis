@@ -1,3 +1,5 @@
+# Author: Jakub Bláha, xblaha36
+
 """
 Machine Learning Metrics Calculator
 

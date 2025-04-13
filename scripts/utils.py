@@ -1,3 +1,5 @@
+# Author: Jakub Bláha, xblaha36
+
 import mne
 import numpy as np
 from sklearn.calibration import LabelEncoder

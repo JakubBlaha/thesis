@@ -1,3 +1,5 @@
+# Author: Jakub Bláha, xblaha36
+
 """
 Deep Learning Module for EEG Classification
 
