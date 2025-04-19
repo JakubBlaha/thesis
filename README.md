@@ -114,6 +114,13 @@ The project provides a command-line interface with several commands for the EEG 
    - `--final-classifier`: Optional. Final classifier for stacking (logistic, rf, mlp, or gb, default: logistic)
    - `--seed`: Optional. Random seed (default: 42)
 
+8. **metrics** - Calculate and visualize metrics for classification results
+   ```
+   python -m scripts metrics [--file <RESULTS_FILE>] [--title <PLOT_TITLE>]
+   ```
+   - `--file`: Optional. Path to the results CSV file (uses latest file if not provided)
+   - `--title`: Optional. Title for the confusion matrix plot
+
 ### Complete Pipeline Example
 
 To run the complete pipeline with 15-second segments:
@@ -134,11 +141,17 @@ python3 -m scripts extract --seglen 15
 # Train models
 python3 -m scripts train --labeling-scheme sam --cv logo --seglens 15 --classifiers svm-rbf,rf,knn
 
+# Display performance metrics 
+python3 -m scripts metrics
+
 # Run deep learning
 python3 -m scripts deep --seglen 15 --classif lstm
 
 # Train ensemble models
 python3 -m scripts ensemble --strategy stacking --seglen 15
+
+# Display performance metrics 
+python3 -m scripts metrics
 ```
 
 ## Citation
