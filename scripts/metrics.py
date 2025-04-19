@@ -9,6 +9,7 @@ visualization and save it as a PDF.
 
 Usage:
     python metrics.py --file path/to/data.csv --title "Model Name"
+    python metrics.py --latest
 
 Input:
     - CSV file with 'predicted' and 'actual' columns
@@ -21,6 +22,7 @@ Output:
 
 Example:
     python metrics.py --file results.csv --title "Random Forest Model"
+    python metrics.py --latest
 """
 import pandas as pd
 import os
@@ -31,12 +33,16 @@ from sklearn.metrics import (accuracy_score, balanced_accuracy_score,
                              confusion_matrix, classification_report,
                              cohen_kappa_score, precision_score,
                              recall_score, f1_score)
-import argparse
 
 plots_dir = os.path.join(
     os.path.dirname(__file__),
     '..', 'data', 'plots')
 os.makedirs(plots_dir, exist_ok=True)
+
+# Define the results directory path (same as in training.py)
+script_dir = os.path.dirname(__file__)
+data_dir = os.path.join(script_dir, '../data')
+results_dir = os.path.join(data_dir, 'results')
 
 
 def plot_confusion_matrix(conf_matrix, class_labels, title=None,
@@ -98,6 +104,47 @@ def plot_confusion_matrix(conf_matrix, class_labels, title=None,
     plt.tight_layout()
 
     return fig, ax
+
+
+def process_latest_result_file():
+    """
+    Process the most recent result file (alphabetically last) in the results directory.
+
+    This function finds the latest CSV file in the results directory based on alphabetical 
+    sorting, then processes it to calculate metrics and optionally generate a confusion matrix.
+
+    Returns:
+    --------
+    str
+        Path to the processed file, or None if no files were found
+    """
+    # List all CSV files in the results directory
+    csv_files = [f for f in os.listdir(results_dir) if f.endswith('.csv')]
+
+    if not csv_files:
+        print("No CSV files found in the results directory.")
+        return None
+
+    # Sort files alphabetically and get the last one
+    csv_files.sort()
+    latest_file = csv_files[-1]
+    file_path = os.path.join(results_dir, latest_file)
+
+    print(f"Processing the latest result file: {latest_file}")
+
+    # Extract a title from the filename for the plot
+    # Use the classifier name from the filename as the title
+    title_parts = latest_file.split('_')
+    if len(title_parts) > 1:
+        # Use first part of filename as title
+        title = title_parts[0].capitalize()
+    else:
+        title = "Latest Model"
+
+    # Process the file using the main function
+    main(file_path, title)
+
+    return file_path
 
 
 def main(file_path, title=None):
@@ -178,19 +225,3 @@ def main(file_path, title=None):
     print("  " + path)
 
     plt.savefig(os.path.join(plots_dir, fname))
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(
-        description="Calculate Machine Learning Metrics from a CSV file with predicted and actual labels."
-    )
-    parser.add_argument(
-        '--file', type=str, default='data.csv',
-        help='Path to the CSV file (default: data.csv)'
-    )
-    parser.add_argument(
-        '--title', type=str,
-        help='Title for the confusion matrix plot (required for confusion matrix generation)'
-    )
-    args = parser.parse_args()
-    main(args.file, args.title)

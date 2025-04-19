@@ -8,6 +8,7 @@ from extract_features import extract_features_from_all_segments
 from training import train_models
 from deep import run_deep_learning
 from ensemble import train_model as run_ensemble
+from metrics import process_latest_result_file
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -59,7 +60,7 @@ def main():
 
     available_commands = [
         "convert", "segment", "autoreject", "extract", "train",
-        "deep", "ensemble"]
+        "deep", "ensemble", "metrics"]
 
     cmd_parsers = {}
 
@@ -181,6 +182,17 @@ def main():
         help="Random seed for reproducibility (default: 42)",
     )
 
+    # Add metrics command arguments
+    cmd_parsers["metrics"].add_argument(
+        "--file",
+        help="Path to the results CSV file (optional, uses latest file if not provided)"
+    )
+
+    cmd_parsers["metrics"].add_argument(
+        "--title",
+        help="Title for the confusion matrix plot (optional)"
+    )
+
     args = parser.parse_args()
 
     if not args.command or args.command not in available_commands:
@@ -272,6 +284,17 @@ def main():
         )
 
         logger.info("Ensemble training completed.")
+
+    if args.command == "metrics":
+        if args.file:
+            from metrics import main as metrics_main
+            logger.info(f"Calculating metrics for file: {args.file}")
+            metrics_main(args.file, args.title)
+        else:
+            logger.info("Calculating metrics for latest results file")
+            process_latest_result_file()
+
+        logger.info("Metrics calculation completed.")
 
 
 if __name__ == '__main__':
