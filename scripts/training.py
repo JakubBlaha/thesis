@@ -6,14 +6,14 @@ import numpy as np
 
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, StandardScaler
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import LeaveOneGroupOut, StratifiedKFold, cross_val_score, GridSearchCV
+from sklearn.model_selection import LeaveOneGroupOut, StratifiedKFold, cross_val_score, GridSearchCV, cross_val_predict
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn import svm
 from sklearn.feature_selection import SelectFdr, SelectFpr, SelectKBest, f_classif
 from sklearn.pipeline import FunctionTransformer, Pipeline
-from sklearn.metrics import f1_score, precision_score, recall_score, confusion_matrix
+from sklearn.metrics import f1_score, precision_score, recall_score, confusion_matrix, accuracy_score
 import pandas as pd
 
 from utils import DatasetBuilder, LabelingScheme, DaspsLabeling
@@ -348,22 +348,46 @@ def train_model(
 
     print(tabulate(best_params, headers="keys", tablefmt="pretty"))
 
-    # Print scores as a table
-    score_results = {
-        "Metric":
-        ["Mean accuracy", "Std accuracy", "Mean F1 (macro)",
-         "Mean Precision (macro)", "Mean Recall (macro)"],
-        "Value":
-        [round(i, 2)
-         for i
-         in
-         [scores.mean(),
-          scores.std(),
-          np.mean(f1_scores),
-          np.mean(precision_scores),
-          np.mean(recall_scores)]]}
+    # Get predictions using cross-validation
+    y_pred = cross_val_predict(
+        best_estimator, features, labels,
+        cv=_cv, groups=groups if cv == 'logo' else None,
+        n_jobs=-1, verbose=verbosity
+    )
 
-    print(tabulate(score_results, headers="keys", tablefmt="pretty"))
+    # Convert predictions and actual labels to string representations
+    actual_labels_str = [int_to_label[int(label)] for label in labels]
+    predicted_labels_str = [int_to_label[int(pred)] for pred in y_pred]
+
+    # Create DataFrame with predictions
+    df_predictions = pd.DataFrame({
+        "predicted": predicted_labels_str,
+        "actual": actual_labels_str
+    })
+
+    # Generate a timestamp for the filename
+    timestamp = str(int(datetime.datetime.now().timestamp()))
+
+    # Create predictions filename
+    predictions_filename = os.path.join(
+        results_dir,
+        f"{classif}_seglen_{seglen}_k_{num_selected_features}_predictions_{timestamp}.csv"
+    )
+
+    # Save predictions to CSV
+    df_predictions.to_csv(predictions_filename, index=False)
+
+    # Append model parameters
+    with open(predictions_filename, 'a') as f:
+        f.write("\n\n# Model Parameters:\n")
+        for param, value in search.best_params_.items():
+            f.write(f"# {param},{value}\n")
+        f.write(f"# accuracy,{scores.mean():.3f}\n")
+        f.write(f"# f1_macro,{np.mean(f1_scores):.3f}\n")
+        f.write(f"# precision_macro,{np.mean(precision_scores):.3f}\n")
+        f.write(f"# recall_macro,{np.mean(recall_scores):.3f}\n")
+
+    print(f"Saved predictions and parameters to: {predictions_filename}")
 
     config_table = {
         "Parameter": ["Classifier", "Mode", "CV", "Segment length", "Oversample", "Domains", "Labeling scheme"],
