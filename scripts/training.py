@@ -371,7 +371,7 @@ def train_model(
     # Create predictions filename
     predictions_filename = os.path.join(
         results_dir,
-        f"{classif}_seglen_{seglen}_k_{num_selected_features}_predictions_{timestamp}.csv"
+        f"predictions_{timestamp}_{classif}_seglen_{seglen}_k_{num_selected_features}.csv"
     )
 
     # Save predictions to CSV
