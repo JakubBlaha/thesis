@@ -59,67 +59,95 @@ data
 
 The project provides a command-line interface with several commands for the EEG classification pipeline:
 
+A comprehensive help can be displayed using the following commands:
+
+```bash
+# Display available commands
+python3 -m scripts --help
+
+# Display help for a specific command
+python3 -m scripts train -h
+```
+
 ### Available Commands
 
-1. **convert** - Convert datasets to FIF format
+**`convert`** - Convert datasets to FIF format
    ```
    python -m scripts convert
    ```
 
-2. **segment** - Segment data into specified lengths
+**`segment`** - Segment data into specified lengths
    ```
    python -m scripts segment --seglen <SEGMENT_LENGTH>
    ```
-   - `--seglen`: Required. Segment length in seconds (valid values: 1, 2, 3, 5, 10, 15, 30)
+   
+   | Parameter  | Description                                                      |
+   | ---------- | ---------------------------------------------------------------- |
+   | `--seglen` | Segment length in seconds (valid values: 1, 2, 3, 5, 10, 15, 30) |
 
-3. **autoreject** - Run autoreject artifact rejection
+**`autoreject`** - Run autoreject artifact rejection
    ```
    python -m scripts autoreject
    ```
 
-4. **extract** - Extract features from segments
+**`extract`** - Extract features from segments
    ```
    python -m scripts extract --seglen <SEGMENT_LENGTH>
    ```
-   - `--seglen`: Required. Segment length in seconds
+   
+   | Parameter  | Description               |
+   | ---------- | ------------------------- |
+   | `--seglen` | Segment length in seconds |
 
-5. **train** - Train machine learning models
+**`train`** - Train machine learning models
    ```
    python -m scripts train --labeling-scheme <ham|sam> --cv <logo|skf> --seglens <LENGTHS> --classifiers <CLASSIFIERS> [options]
    ```
-   - `--labeling-scheme`: Required. DASPS labeling scheme (ham or sam)
-   - `--cv`: Required. Cross-validation strategy (logo or skf)
-   - `--seglens`: Required. Comma-separated list of segment lengths (e.g., '1,2,5')
-   - `--classifiers`: Required. Comma-separated list of classifiers (e.g., 'svm-rbf,rf,knn')
-   - `--domains`: Optional. Comma-separated list of feature domains (default: rel_pow,conn,ai,time,abs_pow)
-   - `--mode`: Optional. Dataset mode (both, dasps, or sad, default: both)
-   - `--no-oversample`: Optional. Disable oversampling (enabled by default)
+   
+   | Parameter           | Description                                                                     |
+   | ------------------- | ------------------------------------------------------------------------------- |
+   | `--labeling-scheme` | DASPS labeling scheme (ham or sam)                                              |
+   | `--cv`              | Cross-validation strategy (logo or skf)                                         |
+   | `--seglens`         | Comma-separated list of segment lengths (e.g., '1,2,5')                         |
+   | `--classifiers`     | Comma-separated list of classifiers (e.g., 'svm-rbf,rf,knn')                    |
+   | `--domains`         | Comma-separated list of feature domains (default: rel_pow,conn,ai,time,abs_pow) |
+   | `--mode`            | Dataset mode (both, dasps, or sad, default: both)                               |
+   | `--no-oversample`   | Disable oversampling (enabled by default)                                       |
 
-6. **deep** - Run deep learning models
+**`deep`** - Run deep learning models
    ```
    python -m scripts deep --seglen <SEGMENT_LENGTH> --classif <lstm|cnn>
    ```
-   - `--seglen`: Required. Segment length in seconds
-   - `--classif`: Required. Deep learning classifier type (lstm or cnn)
+   
+   | Parameter   | Description                                 |
+   | ----------- | ------------------------------------------- |
+   | `--seglen`  | Segment length in seconds                   |
+   | `--classif` | Deep learning classifier type (lstm or cnn) |
 
-7. **ensemble** - Train ensemble models
+**`ensemble`** - Train ensemble models
    ```
    python -m scripts ensemble --strategy <voting|stacking> [options]
    ```
-   - `--strategy`: Required. Ensemble strategy (voting or stacking)
-   - `--seglen`: Optional. Segment length in seconds (default: 15)
-   - `--mode`: Optional. Dataset mode (both, dasps, or sad, default: both)
-   - `--domains`: Optional. Comma-separated list of domains (default: all domains)
-   - `--no-oversample`: Optional. Disable oversampling (enabled by default)
-   - `--final-classifier`: Optional. Final classifier for stacking (logistic, rf, mlp, or gb, default: logistic)
-   - `--seed`: Optional. Random seed (default: 42)
+   
+   | Parameter            | Description                                                                 |
+   | -------------------- | --------------------------------------------------------------------------- |
+   | `--strategy`         | Ensemble strategy (voting or stacking)                                      |
+   | `--seglen`           | Segment length in seconds (default: 15)                                     |
+   | `--mode`             | Dataset mode (both, dasps, or sad, default: both)                           |
+   | `--domains`          | Comma-separated list of domains (default: all domains)                      |
+   | `--no-oversample`    | Disable oversampling (enabled by default)                                   |
+   | `--final-classifier` | Final classifier for stacking (logistic, rf, mlp, or gb, default: logistic) |
+   | `--seed`             | Random seed (default: 42)                                                   |
 
-8. **metrics** - Calculate and visualize metrics for classification results
+**`metrics`** - Calculate and visualize metrics for classification results
    ```
    python -m scripts metrics [--file <RESULTS_FILE>] [--title <PLOT_TITLE>]
    ```
-   - `--file`: Optional. Path to the results CSV file (uses latest file if not provided)
-   - `--title`: Optional. Title for the confusion matrix plot
+   
+   | Parameter | Description                                                     |
+   | --------- | --------------------------------------------------------------- |
+   | `--file`  | Path to the results CSV file (uses latest file if not provided) |
+   | `--title` | Title for the confusion matrix plot                             |
 
 ### Complete Pipeline Example
 
@@ -139,7 +167,7 @@ python3 -m scripts autoreject
 python3 -m scripts extract --seglen 15
 
 # Train models
-python3 -m scripts train --labeling-scheme sam --cv logo --seglens 15 --classifiers svm-rbf,rf,knn
+python3 -m scripts train --labeling-scheme ham --cv logo --seglens 15 --classifiers svm-rbf
 
 # Display performance metrics 
 python3 -m scripts metrics
