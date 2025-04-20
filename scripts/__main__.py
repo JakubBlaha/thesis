@@ -54,26 +54,44 @@ def parse_classifiers(classifiers_str):
 
 
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="EEG data processing and machine learning pipeline for sleep stage classification."
+    )
 
-    subparsers = parser.add_subparsers(dest="command")
+    subparsers = parser.add_subparsers(
+        dest="command",
+        title="commands",
+        description="Available commands",
+        help="Select a command to execute"
+    )
 
-    available_commands = [
-        "convert", "segment", "autoreject", "extract", "train",
-        "deep", "ensemble", "metrics"]
+    command_descriptions = {
+        "convert": "Convert DASPS and SAD datasets to FIF format",
+        "segment": "Segment the EEG data into fixed-length segments",
+        "autoreject": "Apply autoreject to clean EEG data",
+        "extract": "Extract features from segmented EEG data",
+        "train": "Train machine learning models on extracted features",
+        "deep": "Run deep learning models (LSTM or CNN) on EEG data",
+        "ensemble": "Create ensemble models using voting or stacking strategies",
+        "metrics": "Calculate and visualize metrics for model evaluation"
+    }
+
+    available_commands = list(command_descriptions.keys())
 
     cmd_parsers = {}
 
-    for command in available_commands:
-        cmd_parsers[command] = subparsers.add_parser(command)
+    for command, description in command_descriptions.items():
+        cmd_parsers[command] = subparsers.add_parser(
+            command,
+            help=description,
+            description=description
+        )
 
     for parser_name in ["segment", "extract"]:
         cmd_parsers[parser_name].add_argument(
-            "--seglen",
-            type=int,
-            help="Segment length in seconds",
-            required=True
-        )
+            "--seglen", type=int,
+            help="Segment length in seconds (valid values: 1, 2, 3, 5, 10, 15, 30)",
+            required=True)
 
     # Add arguments for train command
     cmd_parsers["train"].add_argument(
@@ -86,14 +104,14 @@ def main():
     cmd_parsers["train"].add_argument(
         "--domains",
         default="rel_pow,conn,ai,time,abs_pow",
-        help="Comma-separated list of domains to use (default: all domains)",
+        help="Comma-separated list of domains to use (default: rel_pow,conn,ai,time,abs_pow)",
     )
 
     cmd_parsers["train"].add_argument(
         "--mode",
         choices=["both", "dasps", "sad"],
         default="both",
-        help="Dataset mode for training (default: both)",
+        help="Dataset mode for training (both: use both datasets, dasps: use only DASPS, sad: use only SAD)",
     )
 
     cmd_parsers["train"].add_argument(
@@ -106,7 +124,7 @@ def main():
         "--cv",
         choices=["logo", "skf"],
         required=True,
-        help="Cross-validation strategy",
+        help="Cross-validation strategy (logo: leave-one-group-out, skf: stratified k-fold)",
     )
 
     cmd_parsers["train"].add_argument(
@@ -122,44 +140,40 @@ def main():
     )
 
     cmd_parsers["deep"].add_argument(
-        "--seglen",
-        type=int,
-        help="Segment length in seconds",
-        required=True
-    )
+        "--seglen", type=int,
+        help="Segment length in seconds (valid values: 1, 2, 3, 5, 10, 15, 30)",
+        required=True)
 
     cmd_parsers["deep"].add_argument(
-        "--classif",
-        choices=["lstm", "cnn"],
-        help="Deep learning classifier type (lstm or cnn)",
-        required=True
-    )
+        "--classif", choices=["lstm", "cnn"],
+        help="Deep learning classifier type (lstm: Long Short-Term Memory, cnn: Convolutional Neural Network)",
+        required=True)
 
     cmd_parsers["ensemble"].add_argument(
         "--strategy",
         required=True,
         choices=["voting", "stacking"],
-        help="Ensemble strategy: voting or stacking",
+        help="Ensemble strategy: voting (majority vote) or stacking (meta-classifier)",
     )
 
     cmd_parsers["ensemble"].add_argument(
         "--seglen",
         type=int,
         default=15,
-        help="Segment length in seconds (default: 15)",
+        help="Segment length in seconds (valid values: 1, 2, 3, 5, 10, 15, 30; default: 15)",
     )
 
     cmd_parsers["ensemble"].add_argument(
         "--mode",
         choices=["both", "dasps", "sad"],
         default="both",
-        help="Dataset mode for training (default: both)",
+        help="Dataset mode for training (both: use both datasets, dasps: use only DASPS, sad: use only SAD)",
     )
 
     cmd_parsers["ensemble"].add_argument(
         "--domains",
         default="rel_pow,conn,ai,time,abs_pow",
-        help="Comma-separated list of domains to use (default: all domains)",
+        help="Comma-separated list of domains to use (default: rel_pow,conn,ai,time,abs_pow)",
     )
 
     cmd_parsers["ensemble"].add_argument(
@@ -172,7 +186,7 @@ def main():
         "--final-classifier",
         choices=["logistic", "rf", "mlp", "gb"],
         default="logistic",
-        help="Final classifier for stacking (default: logistic)",
+        help="Final classifier for stacking (logistic: Logistic Regression, rf: Random Forest, mlp: Multi-layer Perceptron, gb: Gradient Boosting; default: logistic)",
     )
 
     cmd_parsers["ensemble"].add_argument(
@@ -195,8 +209,9 @@ def main():
 
     args = parser.parse_args()
 
-    if not args.command or args.command not in available_commands:
+    if not args.command:
         parser.print_help()
+        return
 
     if args.command == "convert":
         convert_dasps_to_fif()
