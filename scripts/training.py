@@ -72,16 +72,10 @@ GRID = {
         "params": {
             "classif__C": [10**i for i in range(-3, 4)],
             "classif__max_iter": [5000],
-            "sel__k": [5, 8, 10, 20, 30, 40, 60, "all"],
+            # "sel__k": [5, 8, 10, 20, 30, 40, 60, "all"],
+            "sel__k": [60]
         }
     },
-    # "svm-lin": {
-    #     "classif": svm.LinearSVC,
-    #     "params": {
-    #         "classif__C": [10**i for i in range(-3, 4)],
-    #         "sel__k": [60]
-    #     }
-    # },
     "svm-poly": {
         "classif": svm.SVC,
         "params": {
@@ -90,33 +84,36 @@ GRID = {
             "classif__kernel": ['poly'],
             "classif__degree": [2, 3, 4],
             "classif__max_iter": [5000],
-            "sel__k": [20, 30, 40, 60, "all"]
+            # "sel__k": [20, 30, 40, 60, "all"]
+            "sel__k": [30]
         }
     },
     "rf": {
         "classif": RandomForestClassifier,
 
+        "params": {
+            # "classif__n_estimators": [300, 400, 450],
+            "classif__n_estimators": [400],
+            "classif__max_depth": [20],
+            # "min_samples_split": [2, 5, 10],
+            # "min_samples_leaf": [1, 2, 4],
+            # "max_features": ['auto', 'sqrt', 'log2'],
+            # "sel__k": [5, 10, 20, 40, 60, "all"],
+            # "sel__k": [5, 10, 20, 40, 60, "all"],
+            "sel__k": [20]
+        },
+
+        # DASPS
         # "params": {
-        #     "classif__n_estimators": [300, 400, 450],
-        #     "classif__max_depth": [5, 6, 8, 10, 15, 20],
+        #     "classif__n_estimators": [300],
+        #     "classif__max_depth": [8],
+        #     "classif__class_weight": ['balanced'],
         #     # "min_samples_split": [2, 5, 10],
         #     # "min_samples_leaf": [1, 2, 4],
         #     # "max_features": ['auto', 'sqrt', 'log2'],
         #     # "sel__k": [5, 10, 20, 40, 60, "all"],
         #     "sel__k": [5, 10, 20, 40, 60, "all"]
         # },
-
-        # DASPS
-        "params": {
-            "classif__n_estimators": [300],
-            "classif__max_depth": [8],
-            "classif__class_weight": ['balanced'],
-            # "min_samples_split": [2, 5, 10],
-            # "min_samples_leaf": [1, 2, 4],
-            # "max_features": ['auto', 'sqrt', 'log2'],
-            # "sel__k": [5, 10, 20, 40, 60, "all"],
-            "sel__k": [5, 10, 20, 40, 60, "all"]
-        },
     },
     # "nb": {
     #     "classif": GaussianNB,
@@ -144,8 +141,8 @@ GRID = {
             "classif__alpha": [10**i for i in range(-9, -5)],
             "classif__learning_rate": ['constant'],
             "classif__max_iter": [2000],
-            "sel__k": [20, 40, 60, "all"],
-            # "sel__k": [60]
+            # "sel__k": [20, 40, 60, "all"],
+            "sel__k": [40]
         },
     },
     # "lda": {
@@ -371,7 +368,7 @@ def train_model(
     # Create predictions filename
     predictions_filename = os.path.join(
         results_dir,
-        f"predictions_{timestamp}_{classif}_seglen_{seglen}_k_{num_selected_features}.csv"
+        f"predictions_{timestamp}_{classif}_seglen_{seglen}_k_{num_selected_features}_cv_{cv}.csv"
     )
 
     # Save predictions to CSV
