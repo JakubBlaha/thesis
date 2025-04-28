@@ -205,18 +205,24 @@ def main(file_path, title=None):
         'CONTROL': 'Control'
     }
 
-    # Define a specific order for the labels: GAD at top, SAD in middle, Control at bottom
+    # Define the full label order
     label_order = ['HI_GAD', 'HI_SAD', 'CONTROL']
-    labels = [nice_labels[label] for label in label_order]
 
-    # Reorder the confusion matrix to match our custom order
-    ordered_indices = [
-        list(sorted(df['actual'].unique())).index(label)
-        for label in label_order]
-    reordered_conf_matrix = conf_matrix[ordered_indices, :][:, ordered_indices]
+    # Only use labels that are present in the data
+    present_labels = [label for label in label_order
+                      if label in df['actual'].unique() or label in df
+                      ['predicted'].unique()]
+    if not present_labels:
+        print("No known labels found in the data. Skipping confusion matrix generation.")
+        return
+
+    labels = [nice_labels[label] for label in present_labels]
+
+    # Compute confusion matrix with explicit label order for sklearn
+    conf_matrix = confusion_matrix(y_true, y_pred, labels=present_labels)
 
     fig, ax = plot_confusion_matrix(
-        reordered_conf_matrix, labels, title=title)
+        conf_matrix, labels, title=title)
     fname = f'conf_matrix__{title.lower().replace(" ", "_")}.pdf'
     path = os.path.abspath(os.path.join(plots_dir, fname))
 
