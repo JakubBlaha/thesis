@@ -34,130 +34,150 @@ os.makedirs(results_dir, exist_ok=True)
 # of the hyperparameters that were actually searched.
 
 GRID = {
-    "svm-rbf": {
-        "classif": svm.SVC,
-
-        # Three class
-        # "params": {
-        #     "classif__C": [10**i for i in range(-3, 5)],
-        #     "classif__gamma": [10**i for i in range(-5, 0)],
-        #     "classif__kernel": ['rbf'],
-        #     "classif__max_iter": [10_000],
-        #     "sel__k": [5, 8, 10, 20, 30, 40, 60, 100, "all"]
+    "both": {
+        "svm-rbf": {
+            "classif": svm.SVC,
+            "params": {
+                "classif__C": [10**i for i in range(-3, 5)],
+                "classif__gamma": [10**i for i in range(-5, 0)],
+                "classif__kernel": ['rbf'],
+                "classif__max_iter": [10_000],
+                "sel__k": [5, 8, 10, 20, 30, 40, 60, 100, "all"]
+            },
+        },
+        "svm-lin": {
+            "classif": svm.LinearSVC,
+            "params": {
+                "classif__C": [10**i for i in range(-3, 4)],
+                "classif__max_iter": [5000],
+                # "sel__k": [5, 8, 10, 20, 30, 40, 60, "all"],
+                "sel__k": [60]
+            }
+        },
+        "svm-poly": {
+            "classif": svm.SVC,
+            "params": {
+                "classif__C": [10**i for i in range(-3, 2)],
+                "classif__gamma": [10**i for i in range(-4, 0)],
+                "classif__kernel": ['poly'],
+                "classif__degree": [2, 3, 4],
+                "classif__max_iter": [5000],
+                # "sel__k": [20, 30, 40, 60, "all"]
+                "sel__k": [30]
+            }
+        },
+        "rf": {
+            "classif": RandomForestClassifier,
+            "params": {
+                # "classif__n_estimators": [300, 400, 450],
+                "classif__n_estimators": [400],
+                "classif__max_depth": [20],
+                # "min_samples_split": [2, 5, 10],
+                # "min_samples_leaf": [1, 2, 4],
+                # "max_features": ['auto', 'sqrt', 'log2'],
+                # "sel__k": [5, 10, 20, 40, 60, "all"],
+                # "sel__k": [5, 10, 20, 40, 60, "all"],
+                "sel__k": [20]
+            }
+        },
+        # "nb": {
+        #     "classif": GaussianNB,
+        #     "params": {
+        #         "classif__var_smoothing": [10**i for i in range(-9, 0)],
+        #         "sel__k": [5, 8, 10, 20, 30, 40, 60]
+        #     }
         # },
-
-        # Binary SAD
-        # "params": {
-        #     "classif__C": [100],
-        #     "classif__gamma": [0.01],
-        #     "classif__kernel": ['rbf'],
-        #     "classif__max_iter": [20_000],
-        #     "sel__k": [5, 8, 10, 20, 30, 40, 60, 100, "all"]
-        # }
-
-        # Binary DASPS
-        "params": {
-            "classif__C": [10**i for i in range(-3, 5)],
-            "classif__gamma": [10**i for i in range(-5, 0)],
-            "classif__kernel": ['rbf'],
-            "classif__max_iter": [10_000],
-            "sel__k": [20],
-            # "sel__k": [5, 8, 10, 20, 30, 40, 60, 100],
-            "classif__class_weight": ['balanced'],
+        "knn": {
+            "classif": KNeighborsClassifier,
+            "params": {
+                "classif__n_neighbors": [3, 5, 8, 10, 15, 20, 30],
+                "classif__weights": ['uniform', 'distance'],
+                "sel__k": [1, 2, 3, 4, 5, 8, 10, 20, 30, 40, 60],
+                # "sel__k": [60],
+            }
         },
-    },
-    # Linear kernel seems to work better without standard scaler
-    "svm-lin": {
-        "classif": svm.LinearSVC,
-        "params": {
-            "classif__C": [10**i for i in range(-3, 4)],
-            "classif__max_iter": [5000],
-            # "sel__k": [5, 8, 10, 20, 30, 40, 60, "all"],
-            "sel__k": [60]
-        }
-    },
-    "svm-poly": {
-        "classif": svm.SVC,
-        "params": {
-            "classif__C": [10**i for i in range(-3, 2)],
-            "classif__gamma": [10**i for i in range(-4, 0)],
-            "classif__kernel": ['poly'],
-            "classif__degree": [2, 3, 4],
-            "classif__max_iter": [5000],
-            # "sel__k": [20, 30, 40, 60, "all"]
-            "sel__k": [30]
-        }
-    },
-    "rf": {
-        "classif": RandomForestClassifier,
-
-        "params": {
-            # "classif__n_estimators": [300, 400, 450],
-            "classif__n_estimators": [400],
-            "classif__max_depth": [20],
-            # "min_samples_split": [2, 5, 10],
-            # "min_samples_leaf": [1, 2, 4],
-            # "max_features": ['auto', 'sqrt', 'log2'],
-            # "sel__k": [5, 10, 20, 40, 60, "all"],
-            # "sel__k": [5, 10, 20, 40, 60, "all"],
-            "sel__k": [20]
+        "mlp": {
+            "classif": MLPClassifier,
+            "params": {
+                "classif__hidden_layer_sizes": [(30,), (20,), (10,)],
+                # "classif__hidden_layer_sizes": [(20,)],
+                "classif__activation": ['relu'],
+                "classif__solver": ['adam'],
+                "classif__alpha": [10**i for i in range(-9, -5)],
+                "classif__learning_rate": ['constant'],
+                "classif__max_iter": [2000],
+                # "sel__k": [20, 40, 60, "all"],
+                "sel__k": [40]
+            },
         },
-
-        # DASPS
-        # "params": {
-        #     "classif__n_estimators": [300],
-        #     "classif__max_depth": [8],
-        #     "classif__class_weight": ['balanced'],
-        #     # "min_samples_split": [2, 5, 10],
-        #     # "min_samples_leaf": [1, 2, 4],
-        #     # "max_features": ['auto', 'sqrt', 'log2'],
-        #     # "sel__k": [5, 10, 20, 40, 60, "all"],
-        #     "sel__k": [5, 10, 20, 40, 60, "all"]
+        # "lda": {
+        #     "classif": LinearDiscriminantAnalysis,
+        #     "params": {
+        #         # "classif__solver": ['svd', 'lsqr', 'eigen'],
+        #         "classif__solver": ['lsqr'],
+        #         # "classif__shrinkage": [None, 'auto'] + [i/10.0 for i in range(1, 10)],
+        #         "classif__shrinkage": ['auto'],
+        #         # "classif__tol": [10**i for i in range(-9, 0)],
+        #         # "classif__n_components": [1, 2, 3, 5, None],
+        #         # "sel__k": [5, 8, 10, 20, 30, 40, 60, "all"],
+        #         "sel__k": [20, 40, 60, "all"],
+        #     }
         # },
     },
-    # "nb": {
-    #     "classif": GaussianNB,
-    #     "params": {
-    #         "classif__var_smoothing": [10**i for i in range(-9, 0)],
-    #         "sel__k": [5, 8, 10, 20, 30, 40, 60]
-    #     }
-    # },
-    "knn": {
-        "classif": KNeighborsClassifier,
-        "params": {
-            "classif__n_neighbors": [3, 5, 8, 10, 15, 20, 30],
-            "classif__weights": ['uniform', 'distance'],
-            "sel__k": [1, 2, 3, 4, 5, 8, 10, 20, 30, 40, 60],
-            # "sel__k": [60],
+    "sad": {
+        "svm-rbf": {
+            "classif": svm.SVC,
+            # Binary SAD
+            "params": {
+                "classif__C": [100],
+                "classif__gamma": [0.01],
+                "classif__kernel": ['rbf'],
+                "classif__max_iter": [20_000],
+                "sel__k": [5, 8, 10, 20, 30, 40, 60, 100, "all"]
+            }
+        },
+        "rf": {
+            "classif": RandomForestClassifier,
+            "params": {
+                # "classif__n_estimators": [300, 400, 450],
+                "classif__n_estimators": [400],
+                "classif__max_depth": [20],
+                # "min_samples_split": [2, 5, 10],
+                # "min_samples_leaf": [1, 2, 4],
+                # "max_features": ['auto', 'sqrt', 'log2'],
+                # "sel__k": [5, 10, 20, 40, 60, "all"],
+                # "sel__k": [5, 10, 20, 40, 60, "all"],
+                "sel__k": [20]
+            }
         }
     },
-    "mlp": {
-        "classif": MLPClassifier,
-        "params": {
-            "classif__hidden_layer_sizes": [(30,), (20,), (10,)],
-            # "classif__hidden_layer_sizes": [(20,)],
-            "classif__activation": ['relu'],
-            "classif__solver": ['adam'],
-            "classif__alpha": [10**i for i in range(-9, -5)],
-            "classif__learning_rate": ['constant'],
-            "classif__max_iter": [2000],
-            # "sel__k": [20, 40, 60, "all"],
-            "sel__k": [40]
+    "dasps": {
+        "svm-rbf": {
+            "classif": svm.SVC,
+            "params": {
+                "classif__C": [10**i for i in range(-3, 5)],
+                "classif__gamma": [10**i for i in range(-5, 0)],
+                "classif__kernel": ['rbf'],
+                "classif__max_iter": [10_000],
+                "sel__k": [20],
+                # "sel__k": [5, 8, 10, 20, 30, 40, 60, 100],
+                "classif__class_weight": ['balanced'],
+            },
         },
-    },
-    # "lda": {
-    #     "classif": LinearDiscriminantAnalysis,
-    #     "params": {
-    #         # "classif__solver": ['svd', 'lsqr', 'eigen'],
-    #         "classif__solver": ['lsqr'],
-    #         # "classif__shrinkage": [None, 'auto'] + [i/10.0 for i in range(1, 10)],
-    #         "classif__shrinkage": ['auto'],
-    #         # "classif__tol": [10**i for i in range(-9, 0)],
-    #         # "classif__n_components": [1, 2, 3, 5, None],
-    #         # "sel__k": [5, 8, 10, 20, 30, 40, 60, "all"],
-    #         "sel__k": [20, 40, 60, "all"],
-    #     }
-    # },
+        "rf": {
+            "classif": RandomForestClassifier,
+            "params": {
+                "classif__n_estimators": [300],
+                "classif__max_depth": [8],
+                "classif__class_weight": ['balanced'],
+                # "min_samples_split": [2, 5, 10],
+                # "min_samples_leaf": [1, 2, 4],
+                # "max_features": ['auto', 'sqrt', 'log2'],
+                # "sel__k": [5, 10, 20, 40, 60, "all"],
+                "sel__k": [5, 10, 20, 40, 60, "all"]
+            },
+        }
+    }
 }
 
 
@@ -233,7 +253,16 @@ def train_model(
     elif cv == 'skf':
         _cv = StratifiedKFold(n_splits=10)
 
-    param_grid = GRID[classif]["params"]
+    # Retrieve classifier grid based on mode with fallback to 'both'
+    if mode in GRID and classif in GRID[mode]:
+        classif_grid = GRID[mode][classif]
+    elif classif in GRID['both']:
+        classif_grid = GRID['both'][classif]
+    else:
+        raise ValueError(
+            f"Classifier '{classif}' not found in GRID for mode '{mode}' or 'both'")
+
+    param_grid = classif_grid.get("params", {})
 
     # Make sure that the number of features in the grid is never
     # greater than the number of available features
@@ -256,7 +285,7 @@ def train_model(
         ('scaler', StandardScaler()),
         ('sel', SelectKBest(score_func=f_classif)),
         # ('sel', SelectFpr(score_func=f_classif, alpha=0.05)),
-        ('classif', GRID[classif]["classif"]())
+        ('classif', classif_grid["classif"]())
     ])
 
     search = GridSearchCV(pipeline, param_grid,
@@ -471,18 +500,24 @@ def train_models(
     """
     results = []
 
-    # Validate that all requested classifiers exist in GRID
+    # Validate that all requested classifiers exist in GRID for the specified mode
     valid_classifiers = []
     for clf in classifiers:
-        if clf in GRID:
+        if mode in GRID and clf in GRID[mode]:
+            valid_classifiers.append(clf)
+        elif clf in GRID.get('both', {}):
             valid_classifiers.append(clf)
         else:
+            available_classifiers = list(
+                GRID.get(mode, {}).keys()) + list(GRID.get('both', {}).keys())
             print(
-                f"Warning: Classifier '{clf}' not found in GRID. Available classifiers: {list(GRID.keys())}")
+                f"Warning: Classifier '{clf}' not found in GRID for mode '{mode}' or 'both'. Available classifiers: {available_classifiers}")
 
     if not valid_classifiers:
+        available_classifiers = list(
+            GRID.get(mode, {}).keys()) + list(GRID.get('both', {}).keys())
         print(
-            f"Error: None of the requested classifiers are available. Available classifiers: {list(GRID.keys())}")
+            f"Error: None of the requested classifiers are available for mode '{mode}'. Available classifiers: {available_classifiers}")
         return
 
     for clf in valid_classifiers:
