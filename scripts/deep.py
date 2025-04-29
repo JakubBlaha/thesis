@@ -288,7 +288,8 @@ def setup_device():
     print(f"Using device: {device}")
 
 
-def plot_training_results(train_losses, val_losses, train_acc, test_acc):
+def plot_training_results(
+        train_losses, val_losses, train_acc, test_acc, classifier_name=None):
     """
     Plots training and validation metrics if show_plots is enabled.
 
@@ -297,6 +298,7 @@ def plot_training_results(train_losses, val_losses, train_acc, test_acc):
         val_losses: List of validation loss values or list of lists (per fold)
         train_acc: List of training accuracy values or list of lists (per fold)
         test_acc: List of test accuracy values or list of lists (per fold)
+        classifier_name: Name of the classifier (e.g., 'CNN', 'LSTM') to include in the plot title (default: None)
     """
     if not show_plots:
         return
@@ -323,7 +325,8 @@ def plot_training_results(train_losses, val_losses, train_acc, test_acc):
                     not in ax.get_legend_handles_labels()[1] else "_")
             ax.set_xlim(0, max_len - 1)
             ax.set_xticks(range(0, max_len))
-            ax.set_title("Accuracy (All Folds)")
+            ax.set_title(
+                f"Accuracy across epochs using {classifier_name.upper()} (All Folds)")
             handles, labels = ax.get_legend_handles_labels()
             # Only show unique labels
             by_label = dict(zip(labels, handles))
@@ -336,7 +339,7 @@ def plot_training_results(train_losses, val_losses, train_acc, test_acc):
                     color='orange', label='Test Accuracy')
             ax.set_xlim(0, N - 1)
             ax.set_xticks(range(0, N))
-            ax.set_title("Accuracy")
+            ax.set_title(f"Accuracy ({classifier_name})")
             ax.legend()
         ax.set(ylim=(0, 1))
         ax.set_ylabel("Accuracy")
@@ -344,9 +347,12 @@ def plot_training_results(train_losses, val_losses, train_acc, test_acc):
     else:
         fig, axs = plt.subplots(1, 2, figsize=(20, 5))
         configs = [
-            (axs[0], {"Train Loss": train_losses, "Validation Loss": val_losses}, "Loss"),
-            (axs[1], {"Train Accuracy": train_acc, "Test Accuracy": test_acc}, "Accuracy")
-        ]
+            (axs[0],
+             {"Train Loss": train_losses, "Validation Loss": val_losses},
+             "Loss"),
+            (axs[1],
+             {"Train Accuracy": train_acc, "Test Accuracy": test_acc},
+             f"Accuracy ({classifier_name}) ")]
         for index, (ax, data_dict, title) in enumerate(configs):
             for label, values in data_dict.items():
                 sns.lineplot(
@@ -361,7 +367,11 @@ def plot_training_results(train_losses, val_losses, train_acc, test_acc):
             ax.set_ylabel(title)
             ax.set_xlabel("Epochs")
             ax.legend()
+
     plt.show()
+
+    if combine_plots:
+        plt.savefig(f"combined_cv_{classifier_name}.pdf")
 
 
 # Model-specific configurations
@@ -591,7 +601,8 @@ def run_deep_learning(seglen: int, model_type_param: str):
             break
 
     # Plot all folds' accuracy curves
-    plot_training_results([], [], all_train_acc, all_test_acc)
+    plot_training_results([], [], all_train_acc, all_test_acc,
+                          classifier_name=model_type_param)
 
     # Statistics
     total_test_acc = np.mean(np.array(all_predictions)
@@ -642,7 +653,10 @@ def run_deep_learning(seglen: int, model_type_param: str):
 
 
 if __name__ == "__main__":
-    seglens = [30]
+    classif = "cnn"
+    # classif = "lstm"
+
+    seglens = [30] if classif == "cnn" else [1]
 
     for seglen in seglens:
-        run_deep_learning(seglen=seglen, model_type_param="cnn")
+        run_deep_learning(seglen=seglens, model_type_param=classif)
