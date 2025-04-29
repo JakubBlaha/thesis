@@ -139,6 +139,12 @@ def main():
         help="Comma-separated list of classifiers to use (e.g., 'svm-rbf,rf,knn')",
     )
 
+    cmd_parsers["train"].add_argument(
+        "--plot-roc",
+        action="store_true",
+        help="Plot ROC curves for the trained models",
+    )
+
     cmd_parsers["deep"].add_argument(
         "--seglen", type=int,
         help="Segment length in seconds (valid values: 1, 2, 3, 5, 10, 15, 30)",
@@ -251,17 +257,19 @@ def main():
         oversample = not args.no_oversample
         cv = args.cv
         classifiers = parse_classifiers(args.classifiers)
+        plot_roc = args.plot_roc
 
         if not classifiers:
             logger.error("No valid classifiers provided")
             return
 
         logger.info(f"Training with classifiers: {classifiers}, seglens: {seglens}, mode: {mode}, domains: {domains}, "
-                    f"labeling scheme: {dasps_labeling_scheme}, oversample: {oversample}, cv: {cv}")
+                    f"labeling scheme: {dasps_labeling_scheme}, oversample: {oversample}, cv: {cv}, plot_roc: {plot_roc}")
 
         train_models(seglens=seglens, mode=mode, domains=domains,
                      dasps_labeling_scheme=dasps_labeling_scheme,
-                     oversample=oversample, cv=cv, classifiers=classifiers)
+                     oversample=oversample, cv=cv, classifiers=classifiers,
+                     plot_roc=plot_roc)
         logger.info("Training completed.")
 
     if args.command == "deep":

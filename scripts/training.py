@@ -11,13 +11,16 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn import svm
-from sklearn.feature_selection import SelectFdr, SelectFpr, SelectKBest, f_classif
-from sklearn.pipeline import FunctionTransformer, Pipeline
+from sklearn.feature_selection import SelectKBest, f_classif
+from sklearn.pipeline import Pipeline
 from sklearn.metrics import f1_score, precision_score, recall_score, confusion_matrix, accuracy_score
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.frozen import FrozenEstimator
 import pandas as pd
 
 from utils import DatasetBuilder, LabelingScheme, DaspsLabeling
 from tabulate import tabulate
+from plots.roc_curve import plot_roc_curves
 
 verbosity = 10
 
@@ -38,11 +41,15 @@ GRID = {
         "svm-rbf": {
             "classif": svm.SVC,
             "params": {
-                "classif__C": [10**i for i in range(-3, 5)],
-                "classif__gamma": [10**i for i in range(-5, 0)],
+                # "classif__C": [10**i for i in range(-3, 5)],
+                "classif__C": [0.01],
+                "classif__gamma": [0.1],
                 "classif__kernel": ['rbf'],
-                "classif__max_iter": [10_000],
-                "sel__k": [5, 8, 10, 20, 30, 40, 60, 100, "all"]
+                # "classif__max_iter": [10_000],
+                "classif__probability": [True],
+                # "sel__k": [5, 8, 10, 20, 30, 40, 60, 100, "all"]
+                "sel__k": [20],
+                "classif__class_weight": ['balanced'],
             },
         },
         "svm-lin": {
@@ -132,8 +139,11 @@ GRID = {
                 "classif__C": [100],
                 "classif__gamma": [0.01],
                 "classif__kernel": ['rbf'],
-                "classif__max_iter": [20_000],
-                "sel__k": [5, 8, 10, 20, 30, 40, 60, 100, "all"]
+                # "classif__max_iter": [20_000],
+                # "sel__k": [5, 8, 10, 20, 30, 40, 60, 100, "all"],
+                "sel__k": [60],
+                "classif__probability": [True],
+                "classif__class_weight": ['balanced'],
             }
         },
         "rf": {
@@ -155,13 +165,15 @@ GRID = {
         "svm-rbf": {
             "classif": svm.SVC,
             "params": {
-                "classif__C": [10**i for i in range(-3, 5)],
-                "classif__gamma": [10**i for i in range(-5, 0)],
+                # "classif__C": [10**i for i in range(-3, 5)],
+                "classif__C": [0.01],
+                "classif__gamma": [1e-05],
                 "classif__kernel": ['rbf'],
-                "classif__max_iter": [10_000],
+                # "classif__max_iter": [10_000],
                 "sel__k": [20],
                 # "sel__k": [5, 8, 10, 20, 30, 40, 60, 100],
                 "classif__class_weight": ['balanced'],
+                "classif__probability": [True],
             },
         },
         "rf": {
@@ -183,7 +195,7 @@ GRID = {
 
 def train_model(
         *, classif, seglen, mode, domains, dasps_labeling_scheme="ham",
-        oversample=True, cv='logo'):
+        oversample=True, cv='logo', plot_roc=False):
     """
     Train a single machine learning model with the specified configuration.
 
@@ -208,6 +220,8 @@ def train_model(
     cv : str, optional
         Cross-validation strategy, either 'logo' (Leave One Group Out) or 'skf' 
         (Stratified K-Fold), default is 'logo'.
+    plot_roc : bool, optional
+        Whether to calculate and plot ROC curves, default is False.
 
     Returns
     -------
@@ -314,6 +328,22 @@ def train_model(
     recall_scores = []
     conf_matrices = []
 
+    # For ROC calculation
+    if plot_roc:
+        # Store prediction probabilities for ROC
+        y_prob_all = []
+        y_test_all = []
+
+        has_predict_proba = hasattr(
+            best_estimator.named_steps['classif'],
+            'predict_proba')
+
+        # Check if we need calibration
+        needs_calibration = not has_predict_proba or isinstance(
+            best_estimator.named_steps['classif'],
+            (svm.LinearSVC, svm.SVC)
+        )
+
     for train_idx, test_idx in _cv.split(
             features, labels, groups if cv == 'logo' else None):
         X_train, X_test = features[train_idx], features[test_idx]
@@ -324,7 +354,7 @@ def train_model(
 
         f1_scores.append(f1_score(y_test, y_pred, average='macro'))
         precision_scores.append(precision_score(
-            y_test, y_pred, average='macro'))
+            y_test, y_pred, average='macro', zero_division=0))
         recall_scores.append(
             recall_score(
                 y_test, y_pred, average='macro',
@@ -333,6 +363,22 @@ def train_model(
         # Create confusion matrix with consistent labels
         cm = confusion_matrix(y_test, y_pred, labels=unique_labels)
         conf_matrices.append(cm)
+
+        # Get prediction probabilities for ROC if available and requested
+        if plot_roc:
+            if needs_calibration:
+                # Create a calibrated version of the classifier
+                calibrated_clf = CalibratedClassifierCV(
+                    FrozenEstimator(best_estimator))
+                # We need to clone and fit only the classification step to avoid
+                # re-fitting the feature selection which would change selected features
+                calibrated_clf.fit(X_train, y_train)
+                y_prob = calibrated_clf.predict_proba(X_test)
+            else:
+                y_prob = best_estimator.predict_proba(X_test)
+
+            y_prob_all.append(y_prob)
+            y_test_all.append(y_test)
 
     # Output
 
@@ -373,6 +419,23 @@ def train_model(
     }
 
     print(tabulate(best_params, headers="keys", tablefmt="pretty"))
+
+    # Plot ROC curves if requested and the classifier supports predict_proba
+    if plot_roc and has_predict_proba and y_prob_all:
+        roc_filename = plot_roc_curves(
+            y_test_all,
+            y_prob_all,
+            unique_labels,
+            int_to_label,
+            classif,
+            seglen,
+            num_selected_features,
+            results_dir
+        )
+        print(f"ROC curve saved to: {roc_filename}")
+    elif plot_roc and not has_predict_proba:
+        print(
+            f"Warning: Classifier {classif} doesn't support predict_proba, ROC curve cannot be generated.")
 
     # Get predictions using cross-validation
     y_pred = cross_val_predict(
@@ -467,7 +530,7 @@ def train_model(
 
 def train_models(
         *, seglens, mode, domains, dasps_labeling_scheme, oversample, cv,
-        classifiers):
+        classifiers, plot_roc=False):
     """
     Train multiple models with different configurations and save results to a CSV file.
 
@@ -492,6 +555,8 @@ def train_models(
         (Stratified K-Fold).
     classifiers : list of str
         List of classifier names to train (must be keys in the GRID dictionary).
+    plot_roc : bool, optional
+        Whether to calculate and plot ROC curves, default is False.
 
     Returns
     -------
@@ -526,7 +591,7 @@ def train_models(
             acc, f1, precision, recall, best_params, num_features, feature_names = train_model(
                 classif=clf, seglen=s, mode=mode, domains=domains,
                 dasps_labeling_scheme=dasps_labeling_scheme,
-                oversample=oversample, cv=cv)
+                oversample=oversample, cv=cv, plot_roc=plot_roc)
             results.append({
                 'classifier': clf,
                 'seglen': s,
