@@ -1,4 +1,5 @@
 # Author: Jakub Bláha, xblaha36
+# %%
 
 """
 Deep Learning Module for EEG Classification
@@ -37,13 +38,14 @@ from models.lstm import EEG_LSTMClassifier
 import random
 
 # Test mode flag - reduces computation for quick verification
-TEST_RUN = False
+N_FOLDS = None
 
 # LSTM configuration parameters
 lstm_enhanced = False
 
 # Global control variables for experiment configuration
-show_plots = False         # Controls visualization of results
+show_plots = True         # Controls visualization of results
+combine_plots = True
 merge_control = True       # Whether to merge control conditions
 oversample = True          # Whether to oversample minority classes
 mode = "both"              # Data processing mode
@@ -69,15 +71,15 @@ random.seed(42)
 shuffled_ids = all_subj_ids.copy()
 random.shuffle(shuffled_ids)
 
-n_in_split = 1
+n_in_split = 5
 val_splits = [
     shuffled_ids[i: i + n_in_split]
     for i in range(0, len(shuffled_ids),
                    n_in_split)]
 
 
-if TEST_RUN:
-    lstm_params['hidden_sizes'] = [1]
+# if TEST_RUN:
+#     lstm_params['hidden_sizes'] = [1]
 
 
 def compile_model(
@@ -136,7 +138,7 @@ def evaluate_model(model, test_loader, criterion):
 def train_model(
         model, train_dataset, test_dataset, *, max_epochs=100,
         learning_rate=0.001, batch_size=32, enable_profiling=False, patience=5,
-        min_epochs=30, class_weights=None, l1_lambda=0.0):
+        min_epochs=30, class_weights=None, l1_lambda=0.0, plot_results=True):
     """
     Trains a deep learning model with early stopping and optional profiling.
 
@@ -152,9 +154,10 @@ def train_model(
         min_epochs: Minimum number of epochs to train regardless of early stopping (default: 30)
         class_weights: Optional weights for handling class imbalance (default: None)
         l1_lambda: L1 regularization parameter (default: 0.0)
+        plot_results: Whether to plot training results (default: True)
 
     Returns:
-        tuple: ((all_predictions, all_targets), test_acc) - predictions, ground truth and test accuracy
+        tuple: ((all_predictions, all_targets), test_acc, train_acc) - predictions, ground truth, test accuracy, and train accuracy
     """
     print("Train samples: ", len(train_dataset))
     print("Test samples: ", len(test_dataset))
@@ -248,7 +251,8 @@ def train_model(
     train_acc = [float(i) for i in train_acc]
     test_acc = [float(i) for i in test_acc]
 
-    plot_training_results(train_losses, val_losses, train_acc, test_acc)
+    if plot_results:
+        plot_training_results(train_losses, val_losses, train_acc, test_acc)
 
     # Load the best model
     if best_state_dict is not None:
@@ -256,7 +260,7 @@ def train_model(
 
     all_predictions, all_targets = evaluate_model(
         model, test_loader, nn.CrossEntropyLoss())
-    return (all_predictions, all_targets), test_acc
+    return (all_predictions, all_targets), test_acc, train_acc
 
 
 def seed():
@@ -289,31 +293,74 @@ def plot_training_results(train_losses, val_losses, train_acc, test_acc):
     Plots training and validation metrics if show_plots is enabled.
 
     Args:
-        train_losses: List of training loss values
-        val_losses: List of validation loss values
-        train_acc: List of training accuracy values
-        test_acc: List of test accuracy values
+        train_losses: List of training loss values or list of lists (per fold)
+        val_losses: List of validation loss values or list of lists (per fold)
+        train_acc: List of training accuracy values or list of lists (per fold)
+        test_acc: List of test accuracy values or list of lists (per fold)
     """
     if not show_plots:
         return
 
-    # Plotting with seaborn
-    fig, axs = plt.subplots(1, 2, figsize=(20, 5))
-    configs = [
-        (axs[0], {"Train Loss": train_losses, "Validation Loss": val_losses}, "Loss"),
-        (axs[1], {"Train Accuracy": train_acc, "Test Accuracy": test_acc}, "Accuracy")
-    ]
-    for index, (ax, data_dict, title) in enumerate(configs):
-        for label, values in data_dict.items():
-            sns.lineplot(x=range(len(values)), y=values, ax=ax, label=label)
+    plt.rcParams['font.family'] = 'serif'
+    plt.rcParams['font.serif'] = ['DejaVu Serif']
 
-        if index == 1:
-            ax.set(ylim=(0, 1))
-
-        ax.set_title(title)
-        ax.set_ylabel(title)
+    if combine_plots:
+        fig, ax = plt.subplots(1, 1, figsize=(8, 4))
+        # If input is a list of lists, plot all
+        if isinstance(train_acc[0], list):
+            max_len = max(len(fold) for fold in train_acc + test_acc)
+            for fold_train, fold_val in zip(train_acc, test_acc):
+                ax.plot(
+                    range(len(fold_train)),
+                    fold_train, color='blue', alpha=0.5,
+                    label='Train Accuracy'
+                    if 'Train Accuracy'
+                    not in ax.get_legend_handles_labels()[1] else "_")
+                ax.plot(
+                    range(len(fold_val)),
+                    fold_val, color='orange', alpha=0.5, label='Test Accuracy'
+                    if 'Test Accuracy'
+                    not in ax.get_legend_handles_labels()[1] else "_")
+            ax.set_xlim(0, max_len - 1)
+            ax.set_xticks(range(0, max_len))
+            ax.set_title("Accuracy (All Folds)")
+            handles, labels = ax.get_legend_handles_labels()
+            # Only show unique labels
+            by_label = dict(zip(labels, handles))
+            ax.legend(by_label.values(), by_label.keys())
+        else:
+            N = max(len(train_acc), len(test_acc))
+            ax.plot(range(len(train_acc)), train_acc,
+                    color='blue', label='Train Accuracy')
+            ax.plot(range(len(test_acc)), test_acc,
+                    color='orange', label='Test Accuracy')
+            ax.set_xlim(0, N - 1)
+            ax.set_xticks(range(0, N))
+            ax.set_title("Accuracy")
+            ax.legend()
+        ax.set(ylim=(0, 1))
+        ax.set_ylabel("Accuracy")
         ax.set_xlabel("Epochs")
-
+    else:
+        fig, axs = plt.subplots(1, 2, figsize=(20, 5))
+        configs = [
+            (axs[0], {"Train Loss": train_losses, "Validation Loss": val_losses}, "Loss"),
+            (axs[1], {"Train Accuracy": train_acc, "Test Accuracy": test_acc}, "Accuracy")
+        ]
+        for index, (ax, data_dict, title) in enumerate(configs):
+            for label, values in data_dict.items():
+                sns.lineplot(
+                    x=range(len(values)),
+                    y=values, ax=ax, label=label)
+            if index == 1:
+                N = max(len(train_acc), len(test_acc))
+                ax.set(ylim=(0, 1))
+                ax.set_xlim(0, N - 1)
+                ax.set_xticks(range(0, N))
+            ax.set_title(title)
+            ax.set_ylabel(title)
+            ax.set_xlabel("Epochs")
+            ax.legend()
     plt.show()
 
 
@@ -388,7 +435,8 @@ def leave_subjects_out_cv(
         batch_size=config["batch_size"],
         min_epochs=config["min_epochs"],
         class_weights=config["class_weights"],
-        l1_lambda=config["l1_lambda"])
+        l1_lambda=config["l1_lambda"],
+        plot_results=False)
 
 
 def gen_conf_matrix(all_targets, all_predictions, int_to_label: dict):
@@ -403,6 +451,10 @@ def gen_conf_matrix(all_targets, all_predictions, int_to_label: dict):
     if not show_plots:
         return
 
+    # Set serif font for all text elements (for consistency with confusion_matrix.py)
+    plt.rcParams['font.family'] = 'serif'
+    plt.rcParams['font.serif'] = ['DejaVu Serif']
+
     conf_matrix = confusion_matrix(all_targets, all_predictions)
     uniq_labels_names = [int_to_label[i] for i in sorted(int_to_label.keys())]
 
@@ -412,6 +464,7 @@ def gen_conf_matrix(all_targets, all_predictions, int_to_label: dict):
     plt.xlabel("Predicted Labels")
     plt.ylabel("True Labels")
     plt.title("Confusion Matrix")
+    plt.tight_layout()
     plt.show()
 
 
@@ -495,6 +548,8 @@ def run_deep_learning(seglen: int, model_type_param: str):
     all_predictions = []
     all_targets = []
     best_epochs = []
+    all_train_acc = []
+    all_test_acc = []
 
     config = model_configs[model_type_param]  # Get current model config
 
@@ -511,10 +566,12 @@ def run_deep_learning(seglen: int, model_type_param: str):
         if ret is None:
             continue
 
-        (_all_predictions, _all_targets), _test_accuracies = ret
+        (_all_predictions, _all_targets), _test_accuracies, _train_accuracies = ret
 
         all_predictions.extend(_all_predictions)
         all_targets.extend(_all_targets)
+        all_train_acc.append(_train_accuracies)
+        all_test_acc.append(_test_accuracies)
 
         _best_epoch = np.argmax(
             _test_accuracies[config["min_epochs"]:]) + config["min_epochs"]
@@ -528,8 +585,13 @@ def run_deep_learning(seglen: int, model_type_param: str):
             f"Progress: {split_idx+1}/{total_splits} folds completed for seglen={seglen}s")
         print("----------------")
 
-        if TEST_RUN:
+        if N_FOLDS != None and split_idx + 1 >= N_FOLDS:
+            print(
+                f"Test run completed: {N_FOLDS} folds processed.")
             break
+
+    # Plot all folds' accuracy curves
+    plot_training_results([], [], all_train_acc, all_test_acc)
 
     # Statistics
     total_test_acc = np.mean(np.array(all_predictions)
@@ -580,7 +642,7 @@ def run_deep_learning(seglen: int, model_type_param: str):
 
 
 if __name__ == "__main__":
-    seglens = [1, 2, 3, 5]
+    seglens = [30]
 
     for seglen in seglens:
-        run_deep_learning(seglen=seglen, model_type_param="lstm")
+        run_deep_learning(seglen=seglen, model_type_param="cnn")
