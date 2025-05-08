@@ -5,12 +5,12 @@ class EEG_LSTMClassifier(nn.Module):
     def __init__(
             self,
             *,
-            input_size,        # Number of channels or features per time step
-            num_classes,       # Number of output classes
-            dropout=0.3,       # Increased default dropout for EEG noise
-            hidden_sizes=[64, 32, 16],  # Configurable LSTM hidden units
-            bidirectional=False,        # Option for bidirectional LSTM
-            use_attention=False         # Option for attention mechanism
+            input_size,
+            num_classes,
+            dropout=0.3,
+            hidden_sizes=[64, 32, 16],
+            bidirectional=False,
+            use_attention=False
     ):
         super(EEG_LSTMClassifier, self).__init__()
 

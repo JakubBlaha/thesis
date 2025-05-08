@@ -1,7 +1,8 @@
 import torch.nn as nn
 
+
 class EEGNet(nn.Module):
-    def __init__(self, num_classes, dropout=0.5, num_channels=14):  # num_channels added
+    def __init__(self, num_classes, dropout=0.5, num_channels=14):
         super(EEGNet, self).__init__()
 
         print("N classes: ", num_classes)
