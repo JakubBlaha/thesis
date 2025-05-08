@@ -368,10 +368,10 @@ def plot_training_results(
             ax.set_xlabel("Epochs")
             ax.legend()
 
-    plt.show()
-
     if combine_plots:
         plt.savefig(f"combined_cv_{classifier_name}.pdf")
+
+    plt.show()
 
 
 # Model-specific configurations
