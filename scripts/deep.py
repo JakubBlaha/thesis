@@ -656,7 +656,6 @@ if __name__ == "__main__":
     classif = "cnn"
     # classif = "lstm"
 
-    seglens = [30] if classif == "cnn" else [1]
+    seglen = 30 if classif == "cnn" else 1
 
-    for seglen in seglens:
-        run_deep_learning(seglen=seglens, model_type_param=classif)
+    run_deep_learning(seglen=seglen, model_type_param=classif)
