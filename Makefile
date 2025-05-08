@@ -1,6 +1,5 @@
 # Variables
-ARCHIVE_NAME = repository-archive
-TIMESTAMP = $(shell date +%Y%m%d-%H%M%S)
+ARCHIVE_NAME = implementation
 ARCHIVES_DIR = archives
 
 # Declare phony targets
@@ -10,5 +9,5 @@ ARCHIVES_DIR = archives
 pack:
 	@mkdir -p $(ARCHIVES_DIR)
 	@echo "Packing repository contents..."
-	@git ls-files | zip -q $(ARCHIVES_DIR)/$(ARCHIVE_NAME)-$(TIMESTAMP).zip -@
-	@echo "Archive created: $(ARCHIVES_DIR)/$(ARCHIVE_NAME)-$(TIMESTAMP).zip"
+	@git ls-files | zip -q $(ARCHIVES_DIR)/$(ARCHIVE_NAME).zip -@
+	@echo "Archive created: $(ARCHIVES_DIR)/$(ARCHIVE_NAME).zip"
