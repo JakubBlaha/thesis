@@ -490,7 +490,6 @@ def train_model(
             maxcolwidths=30))
 
     # Print confusion matrix with proportions (0-1)
-    # First sum all matrices instead of averaging
     sum_conf_matrix = np.sum(conf_matrices, axis=0)
 
     # Normalize by row (convert to proportions 0-1)
