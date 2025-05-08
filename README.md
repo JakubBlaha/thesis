@@ -184,4 +184,4 @@ python3 -m scripts metrics
 
 ## Citation
 
-> BLÁHA, Jakub. EEG-based classification of anxiety subtypes using machine learning. Online, bachelor's Thesis. Muhammad Asad ZAHEER (supervisor). Brno: Brno University of Technology, Faculty of Information Technology, 2025. Available at: https://www.vut.cz/en/students/final-thesis/detail/161455. [accessed 2025-04-19].
+> BLÁHA, Jakub. EEG-based classification of anxiety subtypes using machine learning. Online, bachelor's Thesis. Muhammad Asad ZAHEER (supervisor). Brno: Brno University of Technology, Faculty of Information Technology, 2025. Available at: https://www.vut.cz/en/students/final-thesis/detail/161455.
