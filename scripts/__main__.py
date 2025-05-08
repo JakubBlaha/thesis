@@ -9,6 +9,7 @@ from training import train_models
 from deep import run_deep_learning
 from ensemble import train_model as run_ensemble
 from metrics import process_latest_result_file
+from metrics import process_results_file
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -310,9 +311,8 @@ def main():
 
     if args.command == "metrics":
         if args.file:
-            from metrics import main as metrics_main
             logger.info(f"Calculating metrics for file: {args.file}")
-            metrics_main(args.file, args.title)
+            process_results_file(args.file, args.title)
         else:
             logger.info("Calculating metrics for latest results file")
             process_latest_result_file()

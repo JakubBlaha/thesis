@@ -7,22 +7,17 @@ This script calculates and outputs various machine learning metrics from a CSV f
 containing predicted and actual labels. It can also generate a confusion matrix 
 visualization and save it as a PDF.
 
-Usage:
-    python metrics.py --file path/to/data.csv --title "Model Name"
-    python metrics.py --latest
+The script can be configured to process the latest results file automatically
+or a specific file by calling the `process_results_file` function with a file path and title.
 
 Input:
-    - CSV file with 'predicted' and 'actual' columns
-    - Optional title for the confusion matrix plot
+    - CSV file with 'predicted' and 'actual' columns.
+    - Optional title for the confusion matrix plot when calling `process_results_file` directly.
 
 Output:
     - Printed metrics including accuracy, balanced accuracy, Cohen's kappa,
-      precision, recall, and F1 scores
-    - Confusion matrix visualization saved as PDF (if title is provided)
-
-Example:
-    python metrics.py --file results.csv --title "Random Forest Model"
-    python metrics.py --latest
+      precision, recall, and F1 scores.
+    - Confusion matrix visualization saved as PDF (if a title is provided).
 """
 import pandas as pd
 import os
@@ -141,13 +136,12 @@ def process_latest_result_file():
     else:
         title = "Latest Model"
 
-    # Process the file using the main function
-    main(file_path, title)
+    process_results_file(file_path, title)
 
     return file_path
 
 
-def main(file_path, title=None):
+def process_results_file(file_path, title=None):
     # Read CSV file with columns "predicted" and "actual"
     df = pd.read_csv(file_path, comment='#')
     y_pred = df['predicted']
