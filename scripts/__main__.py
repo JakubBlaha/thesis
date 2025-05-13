@@ -94,7 +94,6 @@ def main():
             help="Segment length in seconds (valid values: 1, 2, 3, 5, 10, 15, 30)",
             required=True)
 
-    # Add arguments for train command
     cmd_parsers["train"].add_argument(
         "--labeling-scheme",
         choices=["ham", "sam"],
@@ -203,7 +202,6 @@ def main():
         help="Random seed for reproducibility (default: 42)",
     )
 
-    # Add metrics command arguments
     cmd_parsers["metrics"].add_argument(
         "--file",
         help="Path to the results CSV file (optional, uses latest file if not provided)"
@@ -245,7 +243,6 @@ def main():
         logger.info("Feature extraction completed.")
 
     if args.command == "train":
-        # Parse segment lengths from command line argument
         try:
             seglens = parse_seglens(args.seglens)
         except ValueError as e:

@@ -103,7 +103,7 @@ def compile_model(
     else:
         criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    # optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
+
     return criterion, optimizer
 
 
@@ -185,7 +185,6 @@ def train_model(
     epochs_no_improve = 0
     best_state_dict = None
 
-    best_val_loss = float('inf')  # Initialize with a very high value
     best_val_acc = 0.0
 
     with profiler_context as prof:
@@ -308,6 +307,7 @@ def plot_training_results(
 
     if combine_plots:
         fig, ax = plt.subplots(1, 1, figsize=(8, 4))
+
         # If input is a list of lists, plot all
         if isinstance(train_acc[0], list):
             max_len = max(len(fold) for fold in train_acc + test_acc)
@@ -328,6 +328,7 @@ def plot_training_results(
             ax.set_title(
                 f"Accuracy across epochs using {classifier_name.upper()} (All Folds)")
             handles, labels = ax.get_legend_handles_labels()
+
             # Only show unique labels
             by_label = dict(zip(labels, handles))
             ax.legend(by_label.values(), by_label.keys())
@@ -494,6 +495,7 @@ def save_results_to_csv(
         seglen_value: Segment length in seconds (default: None)
         model_type: Type of model used (default: None)
     """
+
     # Create directory if it doesn't exist
     result_dir = os.path.join(
         os.path.dirname(os.path.dirname(__file__)),
@@ -561,7 +563,7 @@ def run_deep_learning(seglen: int, model_type_param: str):
     all_train_acc = []
     all_test_acc = []
 
-    config = model_configs[model_type_param]  # Get current model config
+    config = model_configs[model_type_param]
 
     total_splits = len(val_splits)
     for split_idx, test_subjs in enumerate(val_splits):

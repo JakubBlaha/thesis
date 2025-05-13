@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# This script contains example commands to demonstrate the pipeline for 15-second segments.
+
 # Exit immediately if a command exits with a non-zero status
 set -e
 # Treat unset variables as an error

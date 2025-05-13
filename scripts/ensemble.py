@@ -116,7 +116,6 @@ def train_model(*, seglen, mode, domains, strategy,
         domains)
     print("Number of features:", features.shape[1])
 
-    # Use only LeaveOneGroupOut for cross-validation
     cv_strategy = LeaveOneGroupOut()
 
     # Create ensemble model directly here

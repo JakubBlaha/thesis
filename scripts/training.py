@@ -381,7 +381,6 @@ def train_model(
             y_test_all.append(y_test)
 
     # Output
-
     print("Searched parameters grid:")
     if param_grid:  # Only try to tabulate if there are parameters
         param_table = {
